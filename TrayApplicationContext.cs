@@ -497,7 +497,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
 
         _lastConnectionError = message;
-        var tipText = $"Bağlantı sorunu: {message}";
+        var tipText = $"Bağlantı sorunu: {message ?? "Bilinmeyen hata"}";
         _syncContext.Post(_ =>
             _trayIcon.ShowBalloonTip(3000, "MenuBu Yazıcı", tipText, ToolTipIcon.Warning), null);
     }

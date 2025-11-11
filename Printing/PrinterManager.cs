@@ -92,7 +92,7 @@ internal sealed class PrinterManager
                     if (!string.IsNullOrWhiteSpace(SelectedPrinter))
                     {
                         printDocument.PrinterSettings.PrinterName = SelectedPrinter;
-                        if (!printDocument.PrinterSettings.IsValid) printDocument.PrinterSettings.PrinterName = null;
+                        if (!printDocument.PrinterSettings.IsValid) printDocument.PrinterSettings.PrinterName = string.Empty;
                     }
                 }
                 catch { }
@@ -853,7 +853,7 @@ internal sealed class PrinterManager
             }
             else if (normalized.StartsWith("Not", StringComparison.OrdinalIgnoreCase))
             {
-                normalized = normalized;
+                // Keep as is
             }
         }
 
