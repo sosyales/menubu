@@ -110,10 +110,10 @@ internal sealed class PrinterManager
                 printDocument.OriginAtMargins = false;
                 printDocument.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
                 try { ApplyPaperSize(printDocument); } catch { }
-                    printDocument.PrintPage += (sender, e) =>
+                printDocument.PrintPage += (sender, e) =>
+                {
+                    try
                     {
-                        try
-                        {
                         if (e.Graphics == null) { e.HasMorePages = false; return; }
                         var graphics = e.Graphics;
                         var marginBounds = e.MarginBounds;
@@ -167,13 +167,13 @@ internal sealed class PrinterManager
                             graphics.DrawImage(qrImage, destRect);
                         }
                         e.HasMorePages = false;
-                        }
-                        catch (Exception ex)
-                        {
-                            e.HasMorePages = false;
-                            throw new Exception($"PrintPage event hatası: {ex.GetType().Name} - {ex.Message}", ex);
-                        }
-                    };
+                    }
+                    catch (Exception ex)
+                    {
+                        e.HasMorePages = false;
+                        throw new Exception($"PrintPage event hatası: {ex.GetType().Name} - {ex.Message}", ex);
+                    }
+                };
                 Exception? printException = null;
                 try
                 {
