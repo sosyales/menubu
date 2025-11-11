@@ -888,6 +888,12 @@ internal sealed class PrinterManager
 
         var isIndented = raw.StartsWith("   ", StringComparison.Ordinal);
         var normalized = trimmed;
+        
+        // ** işaretlerini kaldır
+        if (normalized.StartsWith("**") && normalized.EndsWith("**") && normalized.Length > 4)
+        {
+            normalized = normalized.Substring(2, normalized.Length - 4);
+        }
 
         if (isIndented)
         {
@@ -918,6 +924,12 @@ internal sealed class PrinterManager
         if (isIndented)
         {
             return PrintLineStyle.Small;
+        }
+
+        // ** ile sarılı metinler kalın
+        if (text.StartsWith("**") && text.EndsWith("**"))
+        {
+            return PrintLineStyle.Bold;
         }
 
         if (text.StartsWith("SIPAR", StringComparison.OrdinalIgnoreCase) ||
