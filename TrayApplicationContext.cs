@@ -20,6 +20,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _logoutMenuItem = new("&Çıkış Yap") { Enabled = false };
     private readonly ToolStripMenuItem _reconnectMenuItem = new("&Yeniden Bağlan") { Enabled = false };
     private readonly ToolStripMenuItem _printerMenuItem = new("&Yazıcı Ayarla") { Enabled = false };
+    private readonly ToolStripMenuItem _printerMappingMenuItem = new("Yazıcı Eşleştir") { Enabled = false };
     private readonly ToolStripMenuItem _clearQueueMenuItem = new("&Kuyruğu Temizle") { Enabled = false };
     private readonly ToolStripMenuItem _exitMenuItem = new("Çı&kış");
 
@@ -61,6 +62,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _logoutMenuItem.Click += (_, _) => Logout();
         _reconnectMenuItem.Click += async (_, _) => await ReconnectAsync();
         _printerMenuItem.Click += (_, _) => ShowPrinterDialog();
+        _printerMappingMenuItem.Click += (_, _) => ShowPrinterMappingDialog();
         _clearQueueMenuItem.Click += async (_, _) => await ClearQueueAsync();
         _exitMenuItem.Click += (_, _) => ExitThread();
 
@@ -85,6 +87,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(_logoutMenuItem);
         menu.Items.Add(_reconnectMenuItem);
         menu.Items.Add(_printerMenuItem);
+        menu.Items.Add(_printerMappingMenuItem);
         menu.Items.Add(_clearQueueMenuItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_exitMenuItem);
@@ -160,6 +163,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _logoutMenuItem.Enabled = true;
         _reconnectMenuItem.Enabled = true;
         _printerMenuItem.Enabled = true;
+        _printerMappingMenuItem.Enabled = true;
         _clearQueueMenuItem.Enabled = true;
 
         ShowStatus($"Bağlandı: {_apiClient.BusinessName}", connected: true);
@@ -373,6 +377,33 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    private void ShowPrinterMappingDialog()
+    {
+        if (_apiClient == null)
+        {
+            MessageBox.Show("Önce giriş yapmalısınız.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var printerConfigs = _apiClient.PrinterConfigs;
+        if (printerConfigs.Count == 0)
+        {
+            MessageBox.Show("Siteden henüz yazıcı tanımlanmamış. Lütfen önce web panelinden yazıcı ekleyin.", "Bilgi", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        using var form = new PrinterMappingForm(printerConfigs, _settings.PrinterMappings);
+        if (form.ShowDialog() == DialogResult.OK)
+        {
+            _settings.PrinterMappings = form.PrinterMappings;
+            _settings.Save();
+            var count = form.PrinterMappings.Count;
+            var message = count > 0 ? $"{count} yazıcı eşleştirildi." : "Eşleştirmeler temizlendi.";
+            _syncContext.Post(_ => 
+                _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", message, ToolTipIcon.Info), null);
+        }
+    }
+
     private void Logout()
     {
         CleanupClient();
@@ -386,6 +417,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _logoutMenuItem.Enabled = false;
         _reconnectMenuItem.Enabled = false;
         _printerMenuItem.Enabled = false;
+        _printerMappingMenuItem.Enabled = false;
         _clearQueueMenuItem.Enabled = false;
     }
 
@@ -523,11 +555,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         if (_apiClient == null || _apiClient.PrinterConfigs.Count == 0)
         {
-            return null;
+            return null; // Varsayılan yazıcı kullanılacak
         }
 
         var jobType = job.JobType?.ToLowerInvariant() ?? "receipt";
         
+        // Önce default yazıcıyı bul
         foreach (var config in _apiClient.PrinterConfigs)
         {
             if (!config.IsActive)
@@ -540,11 +573,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
             {
                 if (config.IsDefault)
                 {
-                    return config.Name;
+                    // Eşleştirme var mı kontrol et
+                    if (_settings.PrinterMappings.TryGetValue(config.Name, out var mappedPrinter))
+                    {
+                        return mappedPrinter;
+                    }
+                    // Eşleştirme yoksa null dön (varsayılan kullanılacak)
+                    return null;
                 }
             }
         }
         
+        // Default yoksa ilk uygun yazıcıyı bul
         foreach (var config in _apiClient.PrinterConfigs)
         {
             if (!config.IsActive)
@@ -555,11 +595,17 @@ internal sealed class TrayApplicationContext : ApplicationContext
             var printerType = config.PrinterType.ToLowerInvariant();
             if (printerType == "all" || printerType == jobType)
             {
-                return config.Name;
+                // Eşleştirme var mı kontrol et
+                if (_settings.PrinterMappings.TryGetValue(config.Name, out var mappedPrinter))
+                {
+                    return mappedPrinter;
+                }
+                // Eşleştirme yoksa null dön (varsayılan kullanılacak)
+                return null;
             }
         }
         
-        return null;
+        return null; // Varsayılan yazıcı kullanılacak
     }
 }
 

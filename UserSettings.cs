@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
@@ -12,6 +13,7 @@ internal sealed class UserSettings
     public string PrinterWidth { get; set; } = "58mm";
     public int FontSizeAdjustment { get; set; } = 0;
     public bool LaunchAtStartup { get; set; } = true;
+    public Dictionary<string, string> PrinterMappings { get; set; } = new();
 
     private static readonly string SettingsPath =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MenuBu", "printer-agent.json");
