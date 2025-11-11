@@ -517,11 +517,6 @@ internal sealed class PrinterManager
             PrinterWidth = widthElement.GetString() ?? PrinterWidth;
         }
 
-        if (TryBuildStructuredReceipt(payloadDoc, out var structuredContent) && structuredContent.Lines.Count > 0)
-        {
-            return structuredContent;
-        }
-
         var content = new PrintContent();
         if (root.TryGetProperty("lines", out var linesElement) && linesElement.ValueKind == JsonValueKind.Array)
         {
