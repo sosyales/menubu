@@ -243,3 +243,57 @@ Yeni sürümler için:
 2. Yeni .exe dosyasını indirin
 3. Eski dosyanın üzerine yazın
 4. Uygulamayı başlatın
+
+## Geliştirici Notları
+
+### GitHub'a Push Etme
+
+```bash
+cd /var/www/fastuser/data/www/menubu.com.tr/Yazici
+
+# Değişiklikleri kontrol et
+git status
+
+# Tüm değişiklikleri ekle
+git add -A
+
+# Commit
+git commit -m "Değişiklik açıklaması"
+
+# Push (SSH ile)
+git push origin main
+```
+
+### Build Kontrolü
+
+Push sonrası:
+1. https://github.com/sosyales/menubu/actions - Build durumu
+2. https://github.com/sosyales/menubu/releases - İndirme linkleri
+
+### Yaygın Hatalar
+
+**CS0017: Multiple entry points**
+- Duplicate `Yazici/` klasörü silin
+- Sadece root'ta `Program.cs` olmalı
+
+**Null warnings**
+- `null` yerine `string.Empty` kullan
+- Null check ekle: `?? "default"`
+
+**Remote rejected**
+```bash
+git pull origin main --allow-unrelated-histories
+git push origin main
+```
+
+### SSH Key Kurulumu
+
+```bash
+# Key oluştur
+ssh-keygen -t ed25519 -C "anamuralem@gmail.com"
+
+# Public key'i göster
+cat ~/.ssh/id_ed25519.pub
+
+# GitHub'a ekle: Settings → SSH Keys → New SSH key
+```

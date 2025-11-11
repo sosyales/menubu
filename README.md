@@ -53,6 +53,27 @@ dotnet run
 
 GitHub Actions otomatik olarak her push'ta derler ve release oluşturur.
 
+## 🔄 GitHub'a Push Etme
+
+```bash
+cd /var/www/fastuser/data/www/menubu.com.tr/Yazici
+
+# Değişiklikleri ekle
+git add -A
+
+# Commit
+git commit -m "Açıklama mesajı"
+
+# Push (SSH key gerekli)
+git push origin main
+```
+
+**Not:** GitHub'a SSH key eklenmeli:
+1. `ssh-keygen -t ed25519 -C "email@example.com"`
+2. `cat ~/.ssh/id_ed25519.pub` - Çıktıyı kopyala
+3. GitHub → Settings → SSH Keys → New SSH key
+4. Yapıştır ve kaydet
+
 ## 📝 Lisans
 
 Proprietary - MenuBu © 2025
