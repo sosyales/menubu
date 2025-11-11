@@ -13,36 +13,56 @@ namespace MenuBuPrinter;
 
 public class PrinterApp : ApplicationContext
 {
-    private readonly NotifyIcon _trayIcon;
+    private NotifyIcon? _trayIcon;
     private readonly HttpClient _http = new();
-    private readonly Timer _pollTimer = new() { Interval = 5000 };
+    private System.Windows.Forms.Timer? _pollTimer;
     private readonly HashSet<int> _processed = new();
     
-    private string? _email, _password, _printerName;
+    private string _email = "";
+    private string _password = "";
+    private string _printerName = "";
     private int _businessId;
     private bool _connected;
 
     public PrinterApp()
     {
+        LoadSettings();
+        InitializeTrayIcon();
+        
+        if (!string.IsNullOrEmpty(_email) && !string.IsNullOrEmpty(_password))
+        {
+            Task.Run(async () => await TryLogin());
+        }
+        else
+        {
+            BeginInvoke(new Action(() => Login()));
+        }
+    }
+    
+    private void InitializeTrayIcon()
+    {
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("Giriş Yap", null, (s, e) => Login());
+        menu.Items.Add("Yazıcı Seç", null, (s, e) => SelectPrinter());
+        menu.Items.Add("Çıkış", null, (s, e) => ExitApp());
+        
         _trayIcon = new NotifyIcon
         {
             Icon = SystemIcons.Application,
-            Text = "MenuBu Yazıcı",
+            Text = "MenuBu Yazıcı - Bağlı Değil",
             Visible = true,
-            ContextMenuStrip = new ContextMenuStrip()
+            ContextMenuStrip = menu
         };
         
-        _trayIcon.ContextMenuStrip.Items.Add("Giriş Yap", null, (s, e) => Login());
-        _trayIcon.ContextMenuStrip.Items.Add("Yazıcı Seç", null, (s, e) => SelectPrinter());
-        _trayIcon.ContextMenuStrip.Items.Add("Çıkış", null, (s, e) => Application.Exit());
-        
-        _pollTimer.Tick += async (s, e) => await PollJobs();
-        
-        LoadSettings();
-        if (!string.IsNullOrEmpty(_email) && !string.IsNullOrEmpty(_password))
-        {
-            _ = TryLogin();
-        }
+        _pollTimer = new System.Windows.Forms.Timer { Interval = 5000 };
+        _pollTimer.Tick += (s, e) => Task.Run(async () => await PollJobs());
+    }
+    
+    private void ExitApp()
+    {
+        _pollTimer?.Stop();
+        _trayIcon?.Dispose();
+        Application.Exit();
     }
 
     private void LoadSettings()
@@ -77,31 +97,44 @@ public class PrinterApp : ApplicationContext
 
     private void Login()
     {
-        using var form = new Form { Text = "Giriş", Width = 350, Height = 200, StartPosition = FormStartPosition.CenterScreen };
-        var emailBox = new TextBox { Left = 20, Top = 20, Width = 300, PlaceholderText = "Email" };
-        var passBox = new TextBox { Left = 20, Top = 60, Width = 300, PlaceholderText = "Şifre", UseSystemPasswordChar = true };
-        var btn = new Button { Text = "Giriş", Left = 220, Top = 100, Width = 100 };
+        var form = new Form 
+        { 
+            Text = "MenuBu Giriş", 
+            Width = 350, 
+            Height = 200, 
+            StartPosition = FormStartPosition.CenterScreen,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
         
-        if (!string.IsNullOrEmpty(_email)) emailBox.Text = _email;
-        if (!string.IsNullOrEmpty(_password)) passBox.Text = _password;
+        var lblEmail = new Label { Text = "Email:", Left = 20, Top = 20, Width = 300 };
+        var emailBox = new TextBox { Left = 20, Top = 45, Width = 300, Text = _email };
+        var lblPass = new Label { Text = "Şifre:", Left = 20, Top = 75, Width = 300 };
+        var passBox = new TextBox { Left = 20, Top = 100, Width = 300, UseSystemPasswordChar = true, Text = _password };
+        var btn = new Button { Text = "Giriş Yap", Left = 220, Top = 130, Width = 100 };
         
-        btn.Click += async (s, e) =>
+        btn.Click += (s, e) =>
         {
             _email = emailBox.Text.Trim();
             _password = passBox.Text;
+            form.DialogResult = DialogResult.OK;
             form.Close();
-            await TryLogin();
         };
         
-        form.Controls.AddRange(new Control[] { emailBox, passBox, btn });
-        form.ShowDialog();
+        form.Controls.AddRange(new Control[] { lblEmail, emailBox, lblPass, passBox, btn });
+        
+        if (form.ShowDialog() == DialogResult.OK)
+        {
+            Task.Run(async () => await TryLogin());
+        }
     }
 
     private async Task TryLogin()
     {
         try
         {
-            var url = $"https://menubu.com.tr/api/print-jobs.php?email={Uri.EscapeDataString(_email!)}&password={Uri.EscapeDataString(_password!)}";
+            var url = $"https://menubu.com.tr/api/print-jobs.php?email={Uri.EscapeDataString(_email)}&password={Uri.EscapeDataString(_password)}";
             var res = await _http.GetStringAsync(url);
             var doc = JsonDocument.Parse(res);
             
@@ -109,19 +142,27 @@ public class PrinterApp : ApplicationContext
             {
                 _businessId = doc.RootElement.GetProperty("business_id").GetInt32();
                 _connected = true;
-                _trayIcon.Text = "MenuBu Yazıcı - Bağlı";
-                _trayIcon.ShowBalloonTip(2000, "MenuBu", "Bağlantı başarılı", ToolTipIcon.Info);
+                
+                BeginInvoke(new Action(() =>
+                {
+                    if (_trayIcon != null)
+                    {
+                        _trayIcon.Text = "MenuBu Yazıcı - Bağlı";
+                        _trayIcon.ShowBalloonTip(2000, "MenuBu", "Bağlantı başarılı", ToolTipIcon.Info);
+                    }
+                    _pollTimer?.Start();
+                }));
+                
                 SaveSettings();
-                _pollTimer.Start();
             }
             else
             {
-                MessageBox.Show("Giriş başarısız", "Hata");
+                BeginInvoke(new Action(() => MessageBox.Show("Giriş başarısız", "Hata")));
             }
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Hata: {ex.Message}", "Hata");
+            BeginInvoke(new Action(() => MessageBox.Show($"Hata: {ex.Message}", "Hata")));
         }
     }
 
@@ -223,25 +264,37 @@ public class PrinterApp : ApplicationContext
 
     private void Print(List<string> lines)
     {
-        var pd = new PrintDocument();
-        if (!string.IsNullOrEmpty(_printerName))
-            pd.PrinterSettings.PrinterName = _printerName;
-        
-        pd.PrintPage += (s, e) =>
+        BeginInvoke(new Action(() =>
         {
-            var font = new Font("Arial", 10);
-            float y = 10;
-            
-            foreach (var line in lines)
+            try
             {
-                e.Graphics!.DrawString(line, font, Brushes.Black, 10, y);
-                y += font.GetHeight(e.Graphics);
+                var pd = new PrintDocument();
+                if (!string.IsNullOrEmpty(_printerName))
+                    pd.PrinterSettings.PrinterName = _printerName;
+                
+                pd.PrintPage += (s, e) =>
+                {
+                    if (e.Graphics == null) return;
+                    
+                    var font = new Font("Arial", 10);
+                    float y = 10;
+                    
+                    foreach (var line in lines)
+                    {
+                        e.Graphics.DrawString(line, font, Brushes.Black, 10, y);
+                        y += font.GetHeight(e.Graphics);
+                    }
+                    
+                    e.HasMorePages = false;
+                };
+                
+                pd.Print();
             }
-            
-            e.HasMorePages = false;
-        };
-        
-        pd.Print();
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Yazdırma hatası: {ex.Message}", "Hata");
+            }
+        }));
     }
 
     private async Task UpdateStatus(int jobId, string status, string? error = null)
