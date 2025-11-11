@@ -97,14 +97,7 @@ internal sealed class PrinterManager
                             throw new InvalidPrinterException($"Yazıcı '{SelectedPrinter}' geçersiz veya erişilebilir değil.");
                         }
                     }
-                    else
-                    {
-                        // Varsayılan yazıcı kontrolü
-                        if (printDocument.PrinterSettings.PrinterName == null || !printDocument.PrinterSettings.IsValid)
-                        {
-                            throw new InvalidPrinterException("Varsayılan yazıcı bulunamadı. Lütfen yazıcı seçin.");
-                        }
-                    }
+                    // Else: Varsayılan yazıcı kullanılacak (PrintDocument otomatik seçer)
                 }
                 catch (InvalidPrinterException)
                 {
