@@ -92,10 +92,28 @@ internal sealed class PrinterManager
                     if (!string.IsNullOrWhiteSpace(SelectedPrinter))
                     {
                         printDocument.PrinterSettings.PrinterName = SelectedPrinter;
-                        if (!printDocument.PrinterSettings.IsValid) printDocument.PrinterSettings.PrinterName = string.Empty;
+                        if (!printDocument.PrinterSettings.IsValid)
+                        {
+                            throw new InvalidPrinterException($"Yazıcı '{SelectedPrinter}' geçersiz veya erişilebilir değil.");
+                        }
+                    }
+                    else
+                    {
+                        // Varsayılan yazıcı kontrolü
+                        if (printDocument.PrinterSettings.PrinterName == null || !printDocument.PrinterSettings.IsValid)
+                        {
+                            throw new InvalidPrinterException("Varsayılan yazıcı bulunamadı. Lütfen yazıcı seçin.");
+                        }
                     }
                 }
-                catch { }
+                catch (InvalidPrinterException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidPrinterException($"Yazıcı ayarları kontrol edilemedi: {ex.Message}", ex);
+                }
                 printDocument.OriginAtMargins = false;
                 printDocument.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
                 try { ApplyPaperSize(printDocument); } catch { }
@@ -159,6 +177,18 @@ internal sealed class PrinterManager
                 {
                     printDocument.PrintController = new StandardPrintController();
                     printDocument.Print();
+                }
+                catch (InvalidOperationException ex)
+                {
+                    var printerName = printDocument.PrinterSettings?.PrinterName ?? "(varsayılan)";
+                    throw new InvalidOperationException(
+                        $"Yazdırma başarısız. Yazıcı: {printerName}. " +
+                        $"Print Spooler servisi çalışıyor mu? Yazıcı hazır mı? Detay: {ex.Message}", ex);
+                }
+                catch (Exception ex)
+                {
+                    var printerName = printDocument.PrinterSettings?.PrinterName ?? "(varsayılan)";
+                    throw new Exception($"Yazdırma hatası. Yazıcı: {printerName}. Hata: {ex.GetType().Name} - {ex.Message}", ex);
                 }
                 finally
                 {
