@@ -888,12 +888,6 @@ internal sealed class PrinterManager
 
         var isIndented = raw.StartsWith("   ", StringComparison.Ordinal);
         var normalized = trimmed;
-        
-        // ** işaretlerini kaldır
-        if (normalized.StartsWith("**") && normalized.EndsWith("**") && normalized.Length > 4)
-        {
-            normalized = normalized.Substring(2, normalized.Length - 4);
-        }
 
         if (isIndented)
         {
@@ -926,23 +920,31 @@ internal sealed class PrinterManager
             return PrintLineStyle.Small;
         }
 
-        // ** ile sarılı metinler kalın
-        if (text.StartsWith("**") && text.EndsWith("**"))
+        // Büyük harfle yazılmış başlıklar kalın
+        if (text.Length > 0 && text == text.ToUpper(TrCulture) && text.Any(char.IsLetter))
         {
             return PrintLineStyle.Bold;
         }
 
-        if (text.StartsWith("SIPAR", StringComparison.OrdinalIgnoreCase) ||
-            text.StartsWith("TOPLAM", StringComparison.OrdinalIgnoreCase) ||
-            text.StartsWith("Musteri", StringComparison.OrdinalIgnoreCase) ||
-            text.StartsWith("Tel", StringComparison.OrdinalIgnoreCase) ||
-            text.StartsWith("Adres", StringComparison.OrdinalIgnoreCase) ||
-            text.StartsWith("Masa", StringComparison.OrdinalIgnoreCase))
+        // Başlıklar kalın (Sipariş No:, Tarih:, vb.)
+        if (text.Contains(":") && text.IndexOf(':') < 20)
+        {
+            var colonIndex = text.IndexOf(':');
+            var beforeColon = text.Substring(0, colonIndex).Trim();
+            if (beforeColon.Length > 0 && beforeColon.Length < 20)
+            {
+                return PrintLineStyle.Bold;
+            }
+        }
+
+        // Ürün satırları kalın (x içeren)
+        if (text.Contains(" x") && char.IsDigit(text.TrimStart()[0]))
         {
             return PrintLineStyle.Bold;
         }
 
-        if (text.Contains(" x ") || text.Contains(" • "))
+        // TOPLAM satırı kalın
+        if (text.StartsWith("TOPLAM", StringComparison.OrdinalIgnoreCase))
         {
             return PrintLineStyle.Bold;
         }
