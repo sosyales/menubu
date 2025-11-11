@@ -17,6 +17,7 @@ public class PrinterApp : ApplicationContext
     private readonly HttpClient _http = new();
     private System.Windows.Forms.Timer? _pollTimer;
     private readonly HashSet<int> _processed = new();
+    private readonly SynchronizationContext _syncContext;
     
     private string _email = "";
     private string _password = "";
@@ -26,6 +27,7 @@ public class PrinterApp : ApplicationContext
 
     public PrinterApp()
     {
+        _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
         LoadSettings();
         InitializeTrayIcon();
         
@@ -35,7 +37,7 @@ public class PrinterApp : ApplicationContext
         }
         else
         {
-            BeginInvoke(new Action(() => Login()));
+            _syncContext.Post(_ => Login(), null);
         }
     }
     
@@ -143,7 +145,7 @@ public class PrinterApp : ApplicationContext
                 _businessId = doc.RootElement.GetProperty("business_id").GetInt32();
                 _connected = true;
                 
-                BeginInvoke(new Action(() =>
+                _syncContext.Post(_ =>
                 {
                     if (_trayIcon != null)
                     {
@@ -151,18 +153,18 @@ public class PrinterApp : ApplicationContext
                         _trayIcon.ShowBalloonTip(2000, "MenuBu", "Bağlantı başarılı", ToolTipIcon.Info);
                     }
                     _pollTimer?.Start();
-                }));
+                }, null);
                 
                 SaveSettings();
             }
             else
             {
-                BeginInvoke(new Action(() => MessageBox.Show("Giriş başarısız", "Hata")));
+                _syncContext.Post(_ => MessageBox.Show("Giriş başarısız", "Hata"), null);
             }
         }
         catch (Exception ex)
         {
-            BeginInvoke(new Action(() => MessageBox.Show($"Hata: {ex.Message}", "Hata")));
+            _syncContext.Post(_ => MessageBox.Show($"Hata: {ex.Message}", "Hata"), null);
         }
     }
 
@@ -264,7 +266,7 @@ public class PrinterApp : ApplicationContext
 
     private void Print(List<string> lines)
     {
-        BeginInvoke(new Action(() =>
+        _syncContext.Post(_ =>
         {
             try
             {
@@ -294,7 +296,7 @@ public class PrinterApp : ApplicationContext
             {
                 MessageBox.Show($"Yazdırma hatası: {ex.Message}", "Hata");
             }
-        }));
+        }, null);
     }
 
     private async Task UpdateStatus(int jobId, string status, string? error = null)
