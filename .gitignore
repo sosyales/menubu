@@ -1,0 +1,241 @@
+-- MenuBu SaaS - Veritabanı Yapısı (v2.0 - FULL)
+-- phpMyAdmin'e import edilecek
+-- NOT: Önce cPanel'den veritabanı oluşturun!
+
+SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+SET time_zone = "+00:00";
+
+-- Mevcut tabloları sil (sıralı olarak)
+DROP TABLE IF EXISTS `activity_logs`;
+DROP TABLE IF EXISTS `orders`;
+DROP TABLE IF EXISTS `tables`;
+DROP TABLE IF EXISTS `areas`;
+DROP TABLE IF EXISTS `product_options`;
+DROP TABLE IF EXISTS `products`;
+DROP TABLE IF EXISTS `categories`;
+DROP TABLE IF EXISTS `businesses`;
+DROP TABLE IF EXISTS `super_admins`;
+
+-- ============================================
+-- Süper Admin Tablosu
+-- ============================================
+CREATE TABLE `super_admins` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `email` varchar(255) NOT NULL,
+  `password` varchar(255) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Varsayılan admin: admin@menubu.com.tr / admin123
+INSERT INTO `super_admins` (`email`, `password`) VALUES 
+('admin@menubu.com.tr', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi');
+
+-- ============================================
+-- İşletmeler Tablosu
+-- ============================================
+CREATE TABLE `businesses` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `slug` varchar(100) NOT NULL,
+  `email` varchar(255) NOT NULL,
+  `password` varchar(255) NOT NULL,
+  `phone` varchar(20) DEFAULT NULL,
+  `logo` varchar(255) DEFAULT NULL,
+  `plan` enum('free','pro','corporate') NOT NULL DEFAULT 'free',
+  `status` enum('active','inactive','suspended') NOT NULL DEFAULT 'active',
+  `expire_date` date DEFAULT NULL,
+  `default_language` varchar(5) NOT NULL DEFAULT 'tr',
+  `supported_languages` varchar(100) DEFAULT 'tr',
+  `telegram_bot_token` varchar(255) DEFAULT NULL,
+  `telegram_chat_id` varchar(100) DEFAULT NULL,
+  `facebook` varchar(255) DEFAULT NULL,
+  `instagram` varchar(255) DEFAULT NULL,
+  `twitter` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `slug` (`slug`),
+  UNIQUE KEY `email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Demo işletme: demo@menubu.com.tr / demo123
+INSERT INTO `businesses` (`name`, `slug`, `email`, `password`, `plan`, `status`, `expire_date`, `supported_languages`) VALUES 
+('Demo Restoran', 'demo', 'demo@menubu.com.tr', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'pro', 'active', '2026-12-31', 'tr,en,de');
+
+-- ============================================
+-- Kategoriler Tablosu (Çok dilli)
+-- ============================================
+CREATE TABLE `categories` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `business_id` int(11) NOT NULL,
+  `name_tr` varchar(255) NOT NULL,
+  `name_en` varchar(255) DEFAULT NULL,
+  `name_de` varchar(255) DEFAULT NULL,
+  `name_ar` varchar(255) DEFAULT NULL,
+  `name_ru` varchar(255) DEFAULT NULL,
+  `name_fr` varchar(255) DEFAULT NULL,
+  `name_es` varchar(255) DEFAULT NULL,
+  `name_it` varchar(255) DEFAULT NULL,
+  `icon` varchar(50) DEFAULT '🍽️',
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `status` enum('active','inactive') NOT NULL DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `business_id` (`business_id`),
+  CONSTRAINT `categories_ibfk_1` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Demo kategoriler
+INSERT INTO `categories` (`business_id`, `name_tr`, `name_en`, `name_de`, `icon`, `sort_order`) VALUES 
+(1, 'Ana Yemekler', 'Main Courses', 'Hauptgerichte', '🍖', 1),
+(1, 'Başlangıçlar', 'Starters', 'Vorspeisen', '🥗', 2),
+(1, 'İçecekler', 'Beverages', 'Getränke', '🥤', 3),
+(1, 'Tatlılar', 'Desserts', 'Desserts', '🍰', 4);
+
+-- ============================================
+-- Ürünler Tablosu (Çok dilli)
+-- ============================================
+CREATE TABLE `products` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `business_id` int(11) NOT NULL,
+  `category_id` int(11) NOT NULL,
+  `name_tr` varchar(255) NOT NULL,
+  `name_en` varchar(255) DEFAULT NULL,
+  `name_de` varchar(255) DEFAULT NULL,
+  `name_ar` varchar(255) DEFAULT NULL,
+  `name_ru` varchar(255) DEFAULT NULL,
+  `name_fr` varchar(255) DEFAULT NULL,
+  `name_es` varchar(255) DEFAULT NULL,
+  `name_it` varchar(255) DEFAULT NULL,
+  `desc_tr` text DEFAULT NULL,
+  `desc_en` text DEFAULT NULL,
+  `desc_de` text DEFAULT NULL,
+  `desc_ar` text DEFAULT NULL,
+  `desc_ru` text DEFAULT NULL,
+  `desc_fr` text DEFAULT NULL,
+  `desc_es` text DEFAULT NULL,
+  `desc_it` text DEFAULT NULL,
+  `price` decimal(10,2) NOT NULL,
+  `image` varchar(255) DEFAULT NULL,
+  `status` enum('active','inactive') NOT NULL DEFAULT 'active',
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `business_id` (`business_id`),
+  KEY `category_id` (`category_id`),
+  CONSTRAINT `products_ibfk_1` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `products_ibfk_2` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Demo ürünler
+INSERT INTO `products` (`business_id`, `category_id`, `name_tr`, `name_en`, `name_de`, `desc_tr`, `desc_en`, `desc_de`, `price`) VALUES 
+(1, 1, 'Izgara Köfte', 'Grilled Meatballs', 'Gegrillte Frikadellen', 'Özel baharatlarla marine edilmiş köfte', 'Meatballs marinated with special spices', 'Frikadellen mit speziellen Gewürzen mariniert', 120.00),
+(1, 1, 'Tavuk Şiş', 'Chicken Skewers', 'Hühnerspieße', 'Izgara tavuk göğsü', 'Grilled chicken breast', 'Gegrillte Hähnchenbrust', 110.00),
+(1, 2, 'Çoban Salata', 'Shepherd Salad', 'Hirtensalat', 'Taze sebzeler', 'Fresh vegetables', 'Frisches Gemüse', 45.00),
+(1, 3, 'Ayran', 'Ayran', 'Ayran', 'Ev yapımı ayran', 'Homemade ayran', 'Hausgemachtes Ayran', 15.00),
+(1, 4, 'Sütlaç', 'Rice Pudding', 'Milchreis', 'Fırın sütlaç', 'Baked rice pudding', 'Gebackener Milchreis', 40.00);
+
+-- ============================================
+-- Ürün Opsiyonları Tablosu
+-- ============================================
+CREATE TABLE `product_options` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `product_id` int(11) NOT NULL,
+  `name_tr` varchar(255) NOT NULL,
+  `name_en` varchar(255) DEFAULT NULL,
+  `name_de` varchar(255) DEFAULT NULL,
+  `price` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `product_id` (`product_id`),
+  CONSTRAINT `product_options_ibfk_1` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- Alan/Bölge Tablosu
+-- ============================================
+CREATE TABLE `areas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `business_id` int(11) NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `status` enum('active','inactive') NOT NULL DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `business_id` (`business_id`),
+  CONSTRAINT `areas_ibfk_1` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Demo alanlar
+INSERT INTO `areas` (`business_id`, `name`) VALUES 
+(1, 'İç Mekan'),
+(1, 'Bahçe'),
+(1, 'Teras');
+
+-- ============================================
+-- Masalar Tablosu
+-- ============================================
+CREATE TABLE `tables` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `business_id` int(11) NOT NULL,
+  `area_id` int(11) NOT NULL,
+  `table_number` varchar(20) NOT NULL,
+  `qr_code` varchar(255) DEFAULT NULL,
+  `status` enum('active','inactive') NOT NULL DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `business_id` (`business_id`),
+  KEY `area_id` (`area_id`),
+  CONSTRAINT `tables_ibfk_1` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `tables_ibfk_2` FOREIGN KEY (`area_id`) REFERENCES `areas` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Demo masalar
+INSERT INTO `tables` (`business_id`, `area_id`, `table_number`) VALUES 
+(1, 1, '1'),
+(1, 1, '2'),
+(1, 1, '3'),
+(1, 2, 'B1'),
+(1, 2, 'B2'),
+(1, 3, 'T1');
+
+-- ============================================
+-- Siparişler Tablosu
+-- ============================================
+CREATE TABLE `orders` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `business_id` int(11) NOT NULL,
+  `table_id` int(11) DEFAULT NULL,
+  `order_number` varchar(20) NOT NULL,
+  `items` text NOT NULL,
+  `total` decimal(10,2) NOT NULL,
+  `status` enum('new','preparing','ready','completed','cancelled') NOT NULL DEFAULT 'new',
+  `customer_name` varchar(100) DEFAULT NULL,
+  `customer_note` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `business_id` (`business_id`),
+  KEY `table_id` (`table_id`),
+  KEY `status` (`status`),
+  KEY `created_at` (`created_at`),
+  CONSTRAINT `orders_ibfk_1` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `orders_ibfk_2` FOREIGN KEY (`table_id`) REFERENCES `tables` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Demo sipariş
+INSERT INTO `orders` (`business_id`, `table_id`, `order_number`, `items`, `total`, `status`, `customer_name`, `customer_note`) VALUES 
+(1, 1, 'ORD20241009001', '[{"id":1,"name":"Izgara Köfte","price":120,"quantity":2},{"id":4,"name":"Ayran","price":15,"quantity":2}]', 270.00, 'new', 'Test Müşteri', 'Az acılı olsun lütfen');
+
+-- ============================================
+-- Aktivite Logları
+-- ============================================
+CREATE TABLE `activity_logs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `business_id` int(11) DEFAULT NULL,
+  `action` varchar(100) NOT NULL,
+  `description` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `business_id` (`business_id`),
+  KEY `created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;eskiyazici/
