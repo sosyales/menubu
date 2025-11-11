@@ -1164,6 +1164,7 @@ internal sealed class PrinterManager
             "delivery" or "adrese teslim" => "Adrese Teslim",
             "pickup" or "gelal" or "gel-al" or "takeaway" => "Gel-Al",
             "selfservice" or "self_service" or "self servis" => "Self Servis",
+            "dine_in" or "dinein" or "masa" => "Masada Yemek",
             _ => char.ToUpper(raw[0], TrCulture) + raw[1..]
         };
     }
