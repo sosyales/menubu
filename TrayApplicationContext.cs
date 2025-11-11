@@ -163,7 +163,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _clearQueueMenuItem.Enabled = true;
 
         ShowStatus($"Bağlandı: {_apiClient.BusinessName}", connected: true);
-        _trayIcon.ShowBalloonTip(2000, "MenuBu", $"{_apiClient.BusinessName} hesabına bağlanıldı.", ToolTipIcon.Info);
+        _syncContext.Post(_ => 
+            _trayIcon.ShowBalloonTip(2000, "MenuBu", $"{_apiClient.BusinessName} hesabına bağlanıldı.", ToolTipIcon.Info), null);
 
         EnsureTimer();
         await HandleInitialJobsAsync(initialJobs);
@@ -309,7 +310,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 errorMsg += $" | Inner: {ex.InnerException.Message}";
             }
             await SafeUpdateJobStatus(job.Id, "failed", errorMsg);
-            _trayIcon.ShowBalloonTip(5000, "MenuBu Yazıcı", $"#{job.Id} yazdırılamadı: {errorMsg}", ToolTipIcon.Warning);
+            _syncContext.Post(_ => 
+                _trayIcon.ShowBalloonTip(5000, "MenuBu Yazıcı", $"#{job.Id} yazdırılamadı: {errorMsg}", ToolTipIcon.Warning), null);
         }
         finally
         {
@@ -365,7 +367,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _settings.PrinterWidth = form.PrinterWidth;
             _settings.FontSizeAdjustment = form.FontSizeAdjustment;
             _settings.Save();
-            _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", form.SelectedPrinter is null ? "Varsayılan yazıcı kullanılacak." : $"Yazıcı seçildi: {form.SelectedPrinter}", ToolTipIcon.Info);
+            var message = form.SelectedPrinter is null ? "Varsayılan yazıcı kullanılacak." : $"Yazıcı seçildi: {form.SelectedPrinter}";
+            _syncContext.Post(_ => 
+                _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", message, ToolTipIcon.Info), null);
         }
     }
 
@@ -376,7 +380,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _settings.Password = string.Empty;
         _settings.Save();
         ShowStatus("Çıkış yapıldı", connected: false);
-        _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", "Hesaptan çıkış yapıldı.", ToolTipIcon.Info);
+        _syncContext.Post(_ => 
+            _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", "Hesaptan çıkış yapıldı.", ToolTipIcon.Info), null);
         _loginMenuItem.Enabled = true;
         _logoutMenuItem.Enabled = false;
         _reconnectMenuItem.Enabled = false;
@@ -459,9 +464,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _processedJobIds.Clear();
             _inFlightJobIds.Clear();
 
-            _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", cleared > 0
-                ? $"{cleared} bekleyen iş temizlendi."
-                : "Bekleyen iş bulunamadı.", ToolTipIcon.Info);
+            var message = cleared > 0 ? $"{cleared} bekleyen iş temizlendi." : "Bekleyen iş bulunamadı.";
+            _syncContext.Post(_ => 
+                _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", message, ToolTipIcon.Info), null);
         }
         catch (Exception ex)
         {
