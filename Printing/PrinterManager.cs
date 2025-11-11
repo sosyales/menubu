@@ -184,6 +184,11 @@ internal sealed class PrinterManager
                 {
                     printException = ex;
                 }
+                finally
+                {
+                    lineEnumerator.Dispose();
+                    qrImage?.Dispose();
+                }
                 
                 if (printException != null)
                 {
@@ -203,11 +208,6 @@ internal sealed class PrinterManager
                     }
                     
                     throw new Exception(errorDetails, printException);
-                }
-                finally
-                {
-                    lineEnumerator.Dispose();
-                    qrImage?.Dispose();
                 }
             }
         }, cancellationToken);
