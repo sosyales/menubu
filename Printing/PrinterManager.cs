@@ -112,6 +112,8 @@ internal sealed class PrinterManager
                 try { ApplyPaperSize(printDocument); } catch { }
                     printDocument.PrintPage += (sender, e) =>
                     {
+                        try
+                        {
                         if (e.Graphics == null) { e.HasMorePages = false; return; }
                         var graphics = e.Graphics;
                         var marginBounds = e.MarginBounds;
@@ -165,23 +167,42 @@ internal sealed class PrinterManager
                             graphics.DrawImage(qrImage, destRect);
                         }
                         e.HasMorePages = false;
+                        }
+                        catch (Exception ex)
+                        {
+                            e.HasMorePages = false;
+                            throw new Exception($"PrintPage event hatası: {ex.GetType().Name} - {ex.Message}", ex);
+                        }
                     };
+                Exception? printException = null;
                 try
                 {
                     printDocument.PrintController = new StandardPrintController();
                     printDocument.Print();
                 }
-                catch (InvalidOperationException ex)
-                {
-                    var printerName = printDocument.PrinterSettings?.PrinterName ?? "(varsayılan)";
-                    throw new InvalidOperationException(
-                        $"Yazdırma başarısız. Yazıcı: {printerName}. " +
-                        $"Print Spooler servisi çalışıyor mu? Yazıcı hazır mı? Detay: {ex.Message}", ex);
-                }
                 catch (Exception ex)
                 {
+                    printException = ex;
+                }
+                
+                if (printException != null)
+                {
                     var printerName = printDocument.PrinterSettings?.PrinterName ?? "(varsayılan)";
-                    throw new Exception($"Yazdırma hatası. Yazıcı: {printerName}. Hata: {ex.GetType().Name} - {ex.Message}", ex);
+                    var errorDetails = $"Yazıcı: {printerName}, Hata: {printException.GetType().Name}";
+                    
+                    if (printException.InnerException != null)
+                    {
+                        errorDetails += $", Inner: {printException.InnerException.GetType().Name} - {printException.InnerException.Message}";
+                    }
+                    
+                    errorDetails += $", Message: {printException.Message}";
+                    
+                    if (printException.StackTrace != null && printException.StackTrace.Contains("PrintPage"))
+                    {
+                        errorDetails += " | Hata PrintPage event'inde oluştu. Muhtemelen içerik render hatası.";
+                    }
+                    
+                    throw new Exception(errorDetails, printException);
                 }
                 finally
                 {
