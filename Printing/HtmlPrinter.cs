@@ -1,9 +1,11 @@
 using System;
 using System.Drawing.Printing;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using PdfiumViewer;
 
 namespace MenuBuPrinterAgent.Printing;
 
@@ -25,8 +27,6 @@ internal sealed class HtmlPrinter : IDisposable
         {
             throw new InvalidOperationException("WebView2 başlatılamadı");
         }
-
-        var tcs = new TaskCompletionSource<bool>();
         
         await _webView.CoreWebView2.ExecuteScriptAsync($@"
             document.open();
@@ -34,10 +34,8 @@ internal sealed class HtmlPrinter : IDisposable
             document.close();
         ");
 
-        // Sayfa yüklenmesini bekle
         await Task.Delay(500, cancellationToken);
 
-        // Yazdırma ayarları
         var printSettings = _webView.CoreWebView2.Environment.CreatePrintSettings();
         printSettings.ShouldPrintBackgrounds = true;
         printSettings.ShouldPrintHeaderAndFooter = false;
@@ -45,26 +43,39 @@ internal sealed class HtmlPrinter : IDisposable
         printSettings.MarginBottom = 0;
         printSettings.MarginLeft = 0;
         printSettings.MarginRight = 0;
-        
-        // Yazıcı seç
-        if (!string.IsNullOrWhiteSpace(SelectedPrinter))
-        {
-            printSettings.PrinterName = SelectedPrinter;
-        }
+        printSettings.ScaleFactor = 1.0;
 
+        var tempPdf = Path.Combine(Path.GetTempPath(), $"menubu_print_{Guid.NewGuid()}.pdf");
+        
         try
         {
-            var result = await _webView.CoreWebView2.PrintToPrinterAsync(printSettings);
+            var result = await _webView.CoreWebView2.PrintToPdfAsync(tempPdf, printSettings);
             
-            if (result != CoreWebView2PrintStatus.Succeeded)
+            if (!result)
             {
-                throw new Exception($"Yazdırma başarısız: {result}");
+                throw new Exception("PDF oluşturulamadı");
             }
+
+            PrintPdf(tempPdf);
         }
-        catch (Exception ex)
+        finally
         {
-            throw new Exception($"HTML yazdırma hatası: {ex.Message}", ex);
+            try { File.Delete(tempPdf); } catch { }
         }
+    }
+
+    private void PrintPdf(string pdfPath)
+    {
+        using var document = PdfDocument.Load(pdfPath);
+        using var printDocument = document.CreatePrintDocument();
+        
+        if (!string.IsNullOrWhiteSpace(SelectedPrinter))
+        {
+            printDocument.PrinterSettings.PrinterName = SelectedPrinter;
+        }
+        
+        printDocument.PrinterSettings.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
+        printDocument.Print();
     }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)

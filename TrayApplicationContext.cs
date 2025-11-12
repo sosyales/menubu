@@ -544,7 +544,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var tipText = $"Bağlantı sorunu: {message ?? "Bilinmeyen hata"}. Yeniden bağlanmak için tıklayın.";
         _syncContext.Post(_ =>
         {
-            _trayIcon.ShowBalloonTip(5000, "MenuBu Yazıcı - Bağlantı Kesildi", tipText, ToolTipIcon.Warning);
+            _trayIcon.ShowBalloonTip(5000, "MenuBu Yazıcı - Bağlantı Kesildi", tipText ?? "Bağlantı hatası", ToolTipIcon.Warning);
         }, null);
         
         // 30 saniye sonra otomatik yeniden bağlanma denemesi
