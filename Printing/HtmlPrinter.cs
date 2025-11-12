@@ -1,11 +1,8 @@
 using System;
-using System.Drawing.Printing;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
-using PdfiumViewer;
 
 namespace MenuBuPrinterAgent.Printing;
 
@@ -36,46 +33,8 @@ internal sealed class HtmlPrinter : IDisposable
 
         await Task.Delay(500, cancellationToken);
 
-        var printSettings = _webView.CoreWebView2.Environment.CreatePrintSettings();
-        printSettings.ShouldPrintBackgrounds = true;
-        printSettings.ShouldPrintHeaderAndFooter = false;
-        printSettings.MarginTop = 0;
-        printSettings.MarginBottom = 0;
-        printSettings.MarginLeft = 0;
-        printSettings.MarginRight = 0;
-        printSettings.ScaleFactor = 1.0;
-
-        var tempPdf = Path.Combine(Path.GetTempPath(), $"menubu_print_{Guid.NewGuid()}.pdf");
-        
-        try
-        {
-            var result = await _webView.CoreWebView2.PrintToPdfAsync(tempPdf, printSettings);
-            
-            if (!result)
-            {
-                throw new Exception("PDF oluşturulamadı");
-            }
-
-            PrintPdf(tempPdf);
-        }
-        finally
-        {
-            try { File.Delete(tempPdf); } catch { }
-        }
-    }
-
-    private void PrintPdf(string pdfPath)
-    {
-        using var document = PdfDocument.Load(pdfPath);
-        using var printDocument = document.CreatePrintDocument();
-        
-        if (!string.IsNullOrWhiteSpace(SelectedPrinter))
-        {
-            printDocument.PrinterSettings.PrinterName = SelectedPrinter;
-        }
-        
-        printDocument.PrinterSettings.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
-        printDocument.Print();
+        await _webView.CoreWebView2.ExecuteScriptAsync("window.print();");
+        await Task.Delay(1000, cancellationToken);
     }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
