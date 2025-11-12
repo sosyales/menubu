@@ -27,8 +27,9 @@ internal sealed class MenuBuApiClient : IDisposable
         _email = email;
         _password = password;
         _httpClient = handler == null ? new HttpClient() : new HttpClient(handler, disposeHandler: false);
-        _httpClient.Timeout = TimeSpan.FromSeconds(10);
+        _httpClient.Timeout = TimeSpan.FromSeconds(15);
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("MenuBu-Printer-Agent/2.0");
+        _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
     }
 
     public async Task<IReadOnlyList<PrintJob>> AuthenticateAndFetchInitialJobsAsync(CancellationToken cancellationToken)
@@ -212,6 +213,7 @@ internal sealed class MenuBuApiClient : IDisposable
                     Id = printerEl.GetProperty("id").GetInt32(),
                     Name = printerEl.GetProperty("name").GetString() ?? "Yazıcı",
                     PrinterType = printerEl.GetProperty("printer_type").GetString() ?? "all",
+                    PrinterWidth = printerEl.TryGetProperty("printer_width", out var width) ? width.GetString() ?? "58mm" : "58mm",
                     IsActive = printerEl.TryGetProperty("is_active", out var active) && active.GetInt32() == 1,
                     IsDefault = printerEl.TryGetProperty("is_default", out var def) && def.GetInt32() == 1
                 });

@@ -47,7 +47,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             SelectedPrinter = _settings.PrinterName
         };
 
-        _pollTimer = new System.Windows.Forms.Timer { Interval = 2000 };
+        _pollTimer = new System.Windows.Forms.Timer { Interval = 3000 };
         _pollTimer.Tick += async (_, _) => await PollJobsAsync();
 
         _trayIcon = new NotifyIcon
@@ -174,8 +174,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _clearQueueMenuItem.Enabled = true;
 
         ShowStatus($"Bağlandı: {_apiClient.BusinessName}", connected: true);
-        _syncContext.Post(_ => 
-            _trayIcon.ShowBalloonTip(2000, "MenuBu", $"{_apiClient.BusinessName} hesabına bağlanıldı.", ToolTipIcon.Info), null);
+        
+        if (!silent)
+        {
+            _syncContext.Post(_ => 
+                _trayIcon.ShowBalloonTip(2000, "Bağlantı Başarılı", $"{_apiClient.BusinessName} - Yazdırma hizmeti aktif.", ToolTipIcon.Info), null);
+        }
 
         EnsureTimer();
         await HandleInitialJobsAsync(initialJobs);
@@ -302,27 +306,35 @@ internal sealed class TrayApplicationContext : ApplicationContext
             
             try
             {
-                using var payloadDoc = JsonDocument.Parse(job.Payload.ToJsonString());
+                var payloadJson = job.Payload.ToJsonString();
+                using var payloadDoc = JsonDocument.Parse(payloadJson);
                 await _printerManager.PrintAsync(payloadDoc, CancellationToken.None);
+                await SafeUpdateJobStatus(job.Id, "printed", null);
+                _processedJobIds.Add(job.Id);
+                
+                // Başarılı yazdırma bildirimi (sessiz)
+                _syncContext.Post(_ => 
+                    _trayIcon.ShowBalloonTip(1500, "Yazdırıldı", $"İş #{job.Id} başarıyla yazdırıldı.", ToolTipIcon.Info), null);
             }
             finally
             {
                 _printerManager.SelectedPrinter = previousPrinter;
             }
-            
-            await SafeUpdateJobStatus(job.Id, "printed", null);
-            _processedJobIds.Add(job.Id);
         }
         catch (Exception ex)
         {
-            var errorMsg = $"{ex.GetType().Name}: {ex.Message}";
+            var errorMsg = ex.Message;
             if (ex.InnerException != null)
             {
-                errorMsg += $" | Inner: {ex.InnerException.Message}";
+                errorMsg = ex.InnerException.Message;
             }
+            
+            // Kısa hata mesajı
+            var shortError = errorMsg.Length > 100 ? errorMsg.Substring(0, 100) + "..." : errorMsg;
+            
             await SafeUpdateJobStatus(job.Id, "failed", errorMsg);
             _syncContext.Post(_ => 
-                _trayIcon.ShowBalloonTip(5000, "MenuBu Yazıcı", $"#{job.Id} yazdırılamadı: {errorMsg}", ToolTipIcon.Warning), null);
+                _trayIcon.ShowBalloonTip(5000, "Yazdırma Hatası", $"İş #{job.Id}: {shortError}", ToolTipIcon.Warning), null);
         }
         finally
         {
@@ -378,9 +390,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _settings.PrinterWidth = form.PrinterWidth;
             _settings.FontSizeAdjustment = form.FontSizeAdjustment;
             _settings.Save();
-            var message = form.SelectedPrinter is null ? "Varsayılan yazıcı kullanılacak." : $"Yazıcı seçildi: {form.SelectedPrinter}";
+            var message = form.SelectedPrinter is null ? "Varsayılan yazıcı kullanılacak" : $"Yazıcı: {form.SelectedPrinter}";
             _syncContext.Post(_ => 
-                _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", message, ToolTipIcon.Info), null);
+                _trayIcon.ShowBalloonTip(2000, "Ayarlar Kaydedildi", message, ToolTipIcon.Info), null);
         }
     }
 
@@ -405,9 +417,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _settings.PrinterMappings = form.PrinterMappings;
             _settings.Save();
             var count = form.PrinterMappings.Count;
-            var message = count > 0 ? $"{count} yazıcı eşleştirildi." : "Eşleştirmeler temizlendi.";
+            var message = count > 0 ? $"{count} yazıcı eşleştirildi" : "Eşleştirmeler temizlendi";
             _syncContext.Post(_ => 
-                _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", message, ToolTipIcon.Info), null);
+                _trayIcon.ShowBalloonTip(2000, "Eşleştirme Kaydedildi", message, ToolTipIcon.Info), null);
         }
     }
 
@@ -419,7 +431,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _settings.Save();
         ShowStatus("Çıkış yapıldı", connected: false);
         _syncContext.Post(_ => 
-            _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", "Hesaptan çıkış yapıldı.", ToolTipIcon.Info), null);
+            _trayIcon.ShowBalloonTip(2000, "Çıkış Yapıldı", "Hesaptan çıkış yapıldı.", ToolTipIcon.Info), null);
         _loginMenuItem.Enabled = true;
         _logoutMenuItem.Enabled = false;
         _reconnectMenuItem.Enabled = false;
@@ -503,9 +515,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _processedJobIds.Clear();
             _inFlightJobIds.Clear();
 
-            var message = cleared > 0 ? $"{cleared} bekleyen iş temizlendi." : "Bekleyen iş bulunamadı.";
+            var message = cleared > 0 ? $"{cleared} iş temizlendi" : "Bekleyen iş bulunamadı";
             _syncContext.Post(_ => 
-                _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", message, ToolTipIcon.Info), null);
+                _trayIcon.ShowBalloonTip(2000, "Kuyruk Temizlendi", message, ToolTipIcon.Info), null);
         }
         catch (Exception ex)
         {
@@ -541,14 +553,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
 
         _lastConnectionError = message;
-        var tipText = $"Bağlantı sorunu: {message ?? "Bilinmeyen hata"}. Yeniden bağlanmak için tıklayın.";
+        var shortMsg = message?.Length > 50 ? message.Substring(0, 50) + "..." : message;
+        var tipText = $"Bağlantı kesildi. 15 saniye sonra otomatik yeniden denenecek.";
         _syncContext.Post(_ =>
         {
-            _trayIcon.ShowBalloonTip(5000, "MenuBu Yazıcı - Bağlantı Kesildi", tipText ?? "Bağlantı hatası", ToolTipIcon.Warning);
+            _trayIcon.ShowBalloonTip(4000, "Bağlantı Hatası", tipText, ToolTipIcon.Warning);
         }, null);
         
-        // 30 saniye sonra otomatik yeniden bağlanma denemesi
-        _ = Task.Delay(30000).ContinueWith(async _ =>
+        // 15 saniye sonra otomatik yeniden bağlanma denemesi
+        _ = Task.Delay(15000).ContinueWith(async _ =>
         {
             if (_lastConnectionError != null && !string.IsNullOrWhiteSpace(_settings.Email))
             {
@@ -573,11 +586,31 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _lastConnectionError = null;
         _syncContext.Post(_ =>
-            _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", "Bağlantı yeniden kuruldu.", ToolTipIcon.Info), null);
+            _trayIcon.ShowBalloonTip(2000, "Bağlantı Kuruldu", "Sunucuya bağlantı yeniden sağlandı.", ToolTipIcon.Info), null);
     }
 
     private string? SelectPrinterForJob(Models.PrintJob job)
     {
+        // Payload'dan printer_id veya printer_name al
+        if (job.Payload.TryGetPropertyValue("printer_id", out var printerIdNode) && printerIdNode != null)
+        {
+            var printerId = printerIdNode.GetValue<int>();
+            var config = _apiClient?.PrinterConfigs.FirstOrDefault(p => p.Id == printerId);
+            if (config != null && _settings.PrinterMappings.TryGetValue(config.Name, out var mappedPrinter))
+            {
+                return mappedPrinter;
+            }
+        }
+        
+        if (job.Payload.TryGetPropertyValue("printer_name", out var printerNameNode) && printerNameNode != null)
+        {
+            var printerName = printerNameNode.GetValue<string>();
+            if (!string.IsNullOrEmpty(printerName) && _settings.PrinterMappings.TryGetValue(printerName, out var mappedPrinter))
+            {
+                return mappedPrinter;
+            }
+        }
+        
         if (_apiClient == null || _apiClient.PrinterConfigs.Count == 0)
         {
             return null; // Varsayılan yazıcı kullanılacak

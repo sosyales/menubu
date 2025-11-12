@@ -24,12 +24,29 @@ Windows masaüstü uygulaması - Restoran siparişlerini otomatik olarak termal 
 
 ## 🔧 Özellikler
 
-- ✅ Otomatik sipariş yazdırma
-- ✅ Mutfak ve adisyon fişleri
-- ✅ QR kod desteği
-- ✅ Çoklu yazıcı desteği
-- ✅ Telegram bildirimleri
-- ✅ Otomatik başlatma
+### Temel Özellikler
+- ✅ **Otomatik Sipariş Yazdırma**: Yeni siparişler anında yazdırılır
+- ✅ **Tüm Entegrasyonlar**: Getir, Migros, Trendyol, Yemeksepeti desteği
+- ✅ **Self Service & Masa Siparişleri**: Tüm sipariş tipleri destekleniyor
+- ✅ **58mm ve 80mm Yazıcılar**: Her iki boyut için optimize edilmiş
+
+### Gelişmiş Özellikler
+- ✅ **Çoklu Yazıcı Eşleştirme**: Farklı yazıcılara farklı fişler
+- ✅ **Otomatik Yeniden Bağlanma**: Bağlantı kesildiğinde 15 saniye sonra tekrar dener
+- ✅ **Otomatik Başlatma**: Windows açılışında otomatik çalışır
+- ✅ **Kuyruk Yönetimi**: Bekleyen işleri görüntüleme ve temizleme
+- ✅ **Bildirimler**: Her işlem için sistem bildirimleri
+
+## ⚙️ Ayarlar
+
+### Yazıcı Ayarları
+- **Yazıcı Seçimi**: Varsayılan veya belirli bir yazıcı seçin
+- **Yazıcı Genişliği**: 58mm veya 80mm
+- **Font Boyutu**: -3 ile +3 arası ayarlama
+
+### Yazıcı Eşleştirme
+- Web panelinden tanımlanan yazıcıları fiziksel yazıcılarla eşleştirin
+- Mutfak, adisyon, bar gibi farklı yazıcılar kullanın
 
 ## 📖 Detaylı Dokümantasyon
 

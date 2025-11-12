@@ -31,6 +31,7 @@ internal sealed class PrinterManager : IDisposable
     public PrinterManager(HttpClient httpClient)
     {
         _httpClient = httpClient;
+        _httpClient.Timeout = TimeSpan.FromSeconds(20);
         UpdateFonts();
     }
 
@@ -557,15 +558,67 @@ internal sealed class PrinterManager : IDisposable
             {
                 try
                 {
-                    var html = _httpClient.GetStringAsync(url).GetAwaiter().GetResult();
-                    foreach (var line in ExtractTextLines(html))
+                    var jsonResponse = _httpClient.GetStringAsync(url).GetAwaiter().GetResult();
+                    
+                    if (string.IsNullOrWhiteSpace(jsonResponse))
                     {
-                        AddLine(content, line);
+                        throw new Exception("Sunucudan boş yanıt alındı");
+                    }
+                    
+                    using var responseDoc = JsonDocument.Parse(jsonResponse);
+                    var responseRoot = responseDoc.RootElement;
+                    
+                    // Hata kontrolü
+                    if (responseRoot.TryGetProperty("error", out var errorEl) && errorEl.ValueKind == JsonValueKind.String)
+                    {
+                        throw new Exception($"Sunucu hatası: {errorEl.GetString()}");
+                    }
+                    
+                    // printer_width'i al
+                    if (responseRoot.TryGetProperty("printer_width", out var widthEl) && widthEl.ValueKind == JsonValueKind.String)
+                    {
+                        PrinterWidth = widthEl.GetString() ?? PrinterWidth;
+                    }
+                    
+                    // lines array'i al
+                    if (responseRoot.TryGetProperty("lines", out var linesEl) && linesEl.ValueKind == JsonValueKind.Array)
+                    {
+                        var lineCount = 0;
+                        foreach (var line in linesEl.EnumerateArray())
+                        {
+                            AddLine(content, line.GetString() ?? string.Empty);
+                            lineCount++;
+                        }
+                        
+                        if (lineCount == 0)
+                        {
+                            throw new Exception("Fiş içeriği boş");
+                        }
+                    }
+                    else
+                    {
+                        throw new Exception("JSON'da 'lines' alanı bulunamadı");
                     }
                 }
-                catch
+                catch (HttpRequestException ex)
                 {
-                    AddLine(content, "Yazdırma içeriği alınamadı.", PrintLineStyle.Bold);
+                    throw new Exception($"Sunucuya bağlanılamadı: {ex.Message}", ex);
+                }
+                catch (TaskCanceledException)
+                {
+                    throw new Exception("Sunucu yanıt vermedi (timeout)");
+                }
+                catch (JsonException ex)
+                {
+                    throw new Exception($"Geçersiz JSON yanıtı: {ex.Message}", ex);
+                }
+                catch (Exception ex) when (ex.Message.StartsWith("Sunucu") || ex.Message.StartsWith("Fiş") || ex.Message.StartsWith("JSON"))
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    throw new Exception($"Beklenmeyen hata: {ex.Message}", ex);
                 }
             }
         }
