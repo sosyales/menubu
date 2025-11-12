@@ -18,4 +18,19 @@
     <None Include="icon.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2739.15" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <Target Name="CopyWebView2Runtime" AfterTargets="Build">
+    <ItemGroup>
+      <WebView2Files Include="$(NuGetPackageRoot)microsoft.web.webview2\**\runtimes\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WebView2Files)" DestinationFolder="$(OutDir)%(RecursiveDir)" />
+  </Target>
+
 </Project>

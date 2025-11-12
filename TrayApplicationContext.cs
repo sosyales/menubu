@@ -47,7 +47,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             SelectedPrinter = _settings.PrinterName
         };
 
-        _pollTimer = new System.Windows.Forms.Timer { Interval = 6000 };
+        _pollTimer = new System.Windows.Forms.Timer { Interval = 2000 };
         _pollTimer.Tick += async (_, _) => await PollJobsAsync();
 
         _trayIcon = new NotifyIcon
@@ -67,6 +67,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _exitMenuItem.Click += (_, _) => ExitThread();
 
         _trayIcon.DoubleClick += (_, _) => ShowStatusBalloon();
+        _trayIcon.BalloonTipClicked += async (_, _) =>
+        {
+            if (!_isConnected && !string.IsNullOrWhiteSpace(_settings.Email))
+            {
+                await ReconnectAsync();
+            }
+        };
 
         if (!string.IsNullOrWhiteSpace(_settings.Email) && !string.IsNullOrWhiteSpace(_settings.Password))
         {
@@ -534,9 +541,27 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
 
         _lastConnectionError = message;
-        var tipText = $"Bağlantı sorunu: {message ?? "Bilinmeyen hata"}";
+        var tipText = $"Bağlantı sorunu: {message ?? "Bilinmeyen hata"}. Yeniden bağlanmak için tıklayın.";
         _syncContext.Post(_ =>
-            _trayIcon.ShowBalloonTip(3000, "MenuBu Yazıcı", tipText, ToolTipIcon.Warning), null);
+        {
+            _trayIcon.ShowBalloonTip(5000, "MenuBu Yazıcı - Bağlantı Kesildi", tipText, ToolTipIcon.Warning);
+        }, null);
+        
+        // 30 saniye sonra otomatik yeniden bağlanma denemesi
+        _ = Task.Delay(30000).ContinueWith(async _ =>
+        {
+            if (_lastConnectionError != null && !string.IsNullOrWhiteSpace(_settings.Email))
+            {
+                try
+                {
+                    await AuthenticateAsync(_settings.Email, _settings.Password, silent: true);
+                }
+                catch
+                {
+                    // Sessizce başarısız ol, kullanıcı manuel bağlanabilir
+                }
+            }
+        });
     }
 
     private void NotifyConnectionRestored()

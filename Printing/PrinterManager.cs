@@ -13,10 +13,11 @@ using System.Threading.Tasks;
 
 namespace MenuBuPrinterAgent.Printing;
 
-internal sealed class PrinterManager
+internal sealed class PrinterManager : IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly object _printLock = new();
+    private readonly HtmlPrinter _htmlPrinter = new();
     private Font _normalFont58 = null!;
     private Font _boldFont58 = null!;
     private Font _smallFont58 = null!;
@@ -72,10 +73,26 @@ internal sealed class PrinterManager
         }
     }
 
-    public Task PrintAsync(JsonDocument payloadDoc, CancellationToken cancellationToken)
+    public async Task PrintAsync(JsonDocument payloadDoc, CancellationToken cancellationToken)
     {
+        var root = payloadDoc.RootElement;
+        
+        // HTML varsa direkt WebView2 ile yazdır
+        if (root.TryGetProperty("html", out var htmlElement) && htmlElement.ValueKind == JsonValueKind.String)
+        {
+            var html = htmlElement.GetString();
+            if (!string.IsNullOrWhiteSpace(html))
+            {
+                _htmlPrinter.SelectedPrinter = SelectedPrinter;
+                _htmlPrinter.PrinterWidth = PrinterWidth;
+                await _htmlPrinter.PrintHtmlAsync(html, cancellationToken);
+                return;
+            }
+        }
+        
+        // Yoksa eski yöntemle devam et
         var content = BuildContent(payloadDoc);
-        return PrintAsync(content, cancellationToken);
+        await PrintAsync(content, cancellationToken);
     }
 
     private Task PrintAsync(PrintContent content, CancellationToken cancellationToken)
@@ -1434,5 +1451,16 @@ internal sealed class PrinterManager
         public string Label { get; }
         public decimal Amount { get; }
         public bool Emphasize { get; }
+    }
+
+    public void Dispose()
+    {
+        _htmlPrinter?.Dispose();
+        _normalFont58?.Dispose();
+        _boldFont58?.Dispose();
+        _smallFont58?.Dispose();
+        _normalFont80?.Dispose();
+        _boldFont80?.Dispose();
+        _smallFont80?.Dispose();
     }
 }

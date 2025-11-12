@@ -1,49 +1,18 @@
-## .NET
-bin/
-obj/
-publish/
-*.user
-*.suo
-*.cache
-*.dll
-*.exe
-*.pdb
-*.log
+# Logs
+logs/*.log
+storage/sessions/*
+storage/cache/*
 
-## Visual Studio
-.vs/
-*.vsidx
-*.vspscc
-*.vsscc
-*.sln.docstates
+# Sensitive files
+config.local.php
+*.asc
+*.pem
+*.key
 
-## Build results
-[Dd]ebug/
-[Rr]elease/
-x64/
-x86/
-[Aa]rm/
-[Aa]rm64/
-bld/
-[Bb]in/
-[Oo]bj/
-
-## User-specific files
-*.rsuser
-*.suo
-*.user
-*.userosscache
-*.sln.docstates
-
-## Rider
+# IDE
+.vscode/
 .idea/
-*.sln.iml
 
-## Windows
+# OS
+.DS_Store
 Thumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-
-## Logs
-logs/
-*.log
