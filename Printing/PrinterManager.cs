@@ -976,17 +976,6 @@ internal sealed class PrinterManager : IDisposable
             return PrintLineStyle.Bold;
         }
 
-        // Başlıklar kalın (Sipariş No:, Tarih:, vb.)
-        if (text.Contains(":") && text.IndexOf(':') < 20)
-        {
-            var colonIndex = text.IndexOf(':');
-            var beforeColon = text.Substring(0, colonIndex).Trim();
-            if (beforeColon.Length > 0 && beforeColon.Length < 20)
-            {
-                return PrintLineStyle.Bold;
-            }
-        }
-
         // Ürün satırları kalın (x içeren)
         if (text.Contains(" x") && char.IsDigit(text.TrimStart()[0]))
         {
