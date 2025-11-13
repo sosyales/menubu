@@ -232,7 +232,7 @@ internal sealed class MenuBuApiClient : IDisposable
     {
         _httpClient.Dispose();
     }
-}
+
     private string BuildAuthQuery()
     {
         var email = Uri.EscapeDataString(_email);
@@ -240,3 +240,4 @@ internal sealed class MenuBuApiClient : IDisposable
         var version = Uri.EscapeDataString(_agentVersion);
         return $"email={email}&password={password}&agent_version={version}";
     }
+}
