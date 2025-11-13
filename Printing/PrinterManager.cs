@@ -929,15 +929,30 @@ internal sealed class PrinterManager : IDisposable
         }
 
         var trimmed = trimmedEnd.Trim();
-        var isIndented = raw.StartsWith("   ", StringComparison.Ordinal);
-        var normalized = trimmed;
-        var isKeyValueLine = false;
-
         if (TryParseKeyValueLine(trimmed, out var key, out var value))
         {
-            normalized = $"{key}: {value}";
-            isKeyValueLine = true;
+            AddColumns(content, new[]
+            {
+                new PrintColumn
+                {
+                    Text = string.Concat(key, ":"),
+                    Style = PrintLineStyle.Bold,
+                    Alignment = PrintLineAlignment.Left,
+                    WidthFraction = 0.35f
+                },
+                new PrintColumn
+                {
+                    Text = value,
+                    Style = PrintLineStyle.Normal,
+                    Alignment = PrintLineAlignment.Left,
+                    WidthFraction = 0.65f
+                }
+            });
+            return;
         }
+
+        var isIndented = raw.StartsWith("   ", StringComparison.Ordinal);
+        var normalized = trimmed;
 
         if (isIndented)
         {
@@ -951,7 +966,7 @@ internal sealed class PrinterManager : IDisposable
             }
         }
 
-        var style = forcedStyle ?? (isKeyValueLine ? PrintLineStyle.Normal : DetermineStyle(normalized, isIndented));
+        var style = forcedStyle ?? DetermineStyle(normalized, isIndented);
         var alignment = DetermineAlignment(normalized, isIndented);
 
         content.Lines.Add(new PrintLine
