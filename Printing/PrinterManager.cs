@@ -98,6 +98,13 @@ internal sealed class PrinterManager : IDisposable
 
     private Task PrintAsync(PrintContent content, CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(content.Html))
+        {
+            _htmlPrinter.SelectedPrinter = SelectedPrinter;
+            _htmlPrinter.PrinterWidth = PrinterWidth;
+            return _htmlPrinter.PrintHtmlAsync(content.Html, cancellationToken);
+        }
+        
         return Task.Run(() =>
         {
             lock (_printLock)
@@ -545,10 +552,11 @@ internal sealed class PrinterManager : IDisposable
         }
         else if (root.TryGetProperty("html", out var htmlElement))
         {
-            var html = htmlElement.GetString() ?? string.Empty;
-            foreach (var line in ExtractTextLines(html))
+            var html = htmlElement.GetString();
+            if (!string.IsNullOrWhiteSpace(html))
             {
-                AddLine(content, line);
+                content.Html = html;
+                return content;
             }
         }
         else if (root.TryGetProperty("url", out var urlElement))
@@ -578,6 +586,15 @@ internal sealed class PrinterManager : IDisposable
                     if (responseRoot.TryGetProperty("printer_width", out var widthEl) && widthEl.ValueKind == JsonValueKind.String)
                     {
                         PrinterWidth = widthEl.GetString() ?? PrinterWidth;
+                    }
+                    if (responseRoot.TryGetProperty("html", out var htmlEl) && htmlEl.ValueKind == JsonValueKind.String)
+                    {
+                        var htmlPayload = htmlEl.GetString();
+                        if (!string.IsNullOrWhiteSpace(htmlPayload))
+                        {
+                            content.Html = htmlPayload;
+                            return content;
+                        }
                     }
                     
                     // lines array'i al

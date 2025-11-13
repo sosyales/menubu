@@ -7,6 +7,7 @@ internal sealed class PrintContent
 {
     public List<PrintLine> Lines { get; } = new();
     public Bitmap? QrImage { get; set; }
+    public string? Html { get; set; }
 }
 
 internal sealed class PrintLine
