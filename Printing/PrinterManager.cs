@@ -707,7 +707,7 @@ internal sealed class PrinterManager : IDisposable
                 {
                     Text = firstRowRight,
                     Style = PrintLineStyle.Small,
-                    Alignment = PrintLineAlignment.Right,
+                    Alignment = PrintLineAlignment.Left,
                     WidthFraction = 0.45f
                 }
             }, spacingAfter: 2f);
@@ -729,7 +729,7 @@ internal sealed class PrinterManager : IDisposable
             {
                 Text = rightSecond,
                 Style = PrintLineStyle.Small,
-                Alignment = PrintLineAlignment.Right,
+                Alignment = PrintLineAlignment.Left,
                 WidthFraction = 0.65f
             }
         }, spacingAfter: 2f);
@@ -740,7 +740,7 @@ internal sealed class PrinterManager : IDisposable
         {
             new PrintColumn { Text = "Adet", Style = PrintLineStyle.Bold, Alignment = PrintLineAlignment.Left, WidthFraction = 0.18f },
             new PrintColumn { Text = "Ürün Adı", Style = PrintLineStyle.Bold, Alignment = PrintLineAlignment.Left, WidthFraction = 0.57f },
-            new PrintColumn { Text = "Fiyat", Style = PrintLineStyle.Bold, Alignment = PrintLineAlignment.Right, WidthFraction = 0.25f }
+            new PrintColumn { Text = "Fiyat", Style = PrintLineStyle.Bold, Alignment = PrintLineAlignment.Left, WidthFraction = 0.25f }
         }, spacingAfter: 4f);
 
         if (orderElement.TryGetProperty("items", out var itemsElement) && itemsElement.ValueKind == JsonValueKind.Array)
@@ -755,7 +755,7 @@ internal sealed class PrinterManager : IDisposable
                 {
                     new PrintColumn { Text = quantityText, Style = PrintLineStyle.Bold, Alignment = PrintLineAlignment.Left, WidthFraction = 0.18f },
                     new PrintColumn { Text = name, Style = PrintLineStyle.Bold, Alignment = PrintLineAlignment.Left, WidthFraction = 0.57f },
-                    new PrintColumn { Text = totalText, Style = PrintLineStyle.Bold, Alignment = PrintLineAlignment.Right, WidthFraction = 0.25f }
+                    new PrintColumn { Text = totalText, Style = PrintLineStyle.Bold, Alignment = PrintLineAlignment.Left, WidthFraction = 0.25f }
                 });
 
                 if (item.TryGetProperty("options", out var optionsElement))
@@ -788,7 +788,7 @@ internal sealed class PrinterManager : IDisposable
                 AddColumns(content, new[]
                 {
                     new PrintColumn { Text = total.Label, Style = isGrandTotal ? PrintLineStyle.Bold : PrintLineStyle.Normal, Alignment = PrintLineAlignment.Left, WidthFraction = 0.6f },
-                    new PrintColumn { Text = FormatMoney(total.Amount), Style = isGrandTotal ? PrintLineStyle.Bold : PrintLineStyle.Normal, Alignment = PrintLineAlignment.Right, WidthFraction = 0.4f }
+                    new PrintColumn { Text = FormatMoney(total.Amount), Style = isGrandTotal ? PrintLineStyle.Bold : PrintLineStyle.Normal, Alignment = PrintLineAlignment.Left, WidthFraction = 0.4f }
                 });
             }
 
@@ -944,7 +944,7 @@ internal sealed class PrinterManager : IDisposable
                 {
                     Text = value,
                     Style = PrintLineStyle.Normal,
-                    Alignment = PrintLineAlignment.Right,
+                    Alignment = PrintLineAlignment.Left,
                     WidthFraction = 0.55f
                 }
             });
