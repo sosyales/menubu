@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -16,6 +17,7 @@ internal sealed class MenuBuApiClient : IDisposable
     private readonly string _email;
     private readonly string _password;
     private string? _apiKey;
+    private static readonly string _agentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
 
     public int BusinessId { get; private set; }
     public string BusinessName { get; private set; } = "MenuBu";
@@ -35,7 +37,7 @@ internal sealed class MenuBuApiClient : IDisposable
     public async Task<IReadOnlyList<PrintJob>> AuthenticateAndFetchInitialJobsAsync(CancellationToken cancellationToken)
     {
         var requestUri = new UriBuilder("https://menubu.com.tr/api/print-jobs.php");
-        requestUri.Query = $"email={Uri.EscapeDataString(_email)}&password={Uri.EscapeDataString(_password)}";
+        requestUri.Query = BuildAuthQuery();
 
         using var response = await _httpClient.GetAsync(requestUri.Uri, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -67,7 +69,7 @@ internal sealed class MenuBuApiClient : IDisposable
     public async Task<IReadOnlyList<PrintJob>> GetPendingJobsAsync(CancellationToken cancellationToken)
     {
         var requestUri = new UriBuilder("https://menubu.com.tr/api/print-jobs.php");
-        requestUri.Query = $"email={Uri.EscapeDataString(_email)}&password={Uri.EscapeDataString(_password)}";
+        requestUri.Query = BuildAuthQuery();
 
         using var response = await _httpClient.GetAsync(requestUri.Uri, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -231,3 +233,10 @@ internal sealed class MenuBuApiClient : IDisposable
         _httpClient.Dispose();
     }
 }
+    private string BuildAuthQuery()
+    {
+        var email = Uri.EscapeDataString(_email);
+        var password = Uri.EscapeDataString(_password);
+        var version = Uri.EscapeDataString(_agentVersion);
+        return $"email={email}&password={password}&agent_version={version}";
+    }
