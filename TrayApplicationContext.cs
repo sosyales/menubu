@@ -35,6 +35,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly SynchronizationContext _syncContext;
     private readonly SemaphoreSlim _pollLock = new(1, 1);
     private bool _initialPromptCompleted;
+    private bool _hasShownPendingJobsPrompt;
     private bool _isDisposed;
     private bool _isConnected;
     private bool _exitRequested;
@@ -178,7 +179,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _printerManager.PrinterWidth = _settings.PrinterWidth;
         _printerManager.FontSizeAdjustment = _settings.FontSizeAdjustment;
 
-        _initialPromptCompleted = false;
+        _initialPromptCompleted = _hasShownPendingJobsPrompt;
         _ignoredJobIds.Clear();
         _processedJobIds.Clear();
         _inFlightJobIds.Clear();
@@ -214,6 +215,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private async Task HandleInitialJobsAsync(IReadOnlyList<Models.PrintJob> jobs)
     {
+        if (_initialPromptCompleted)
+        {
+            return;
+        }
+
         if (jobs.Count == 0)
         {
             _initialPromptCompleted = true;
@@ -242,6 +248,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
 
         _initialPromptCompleted = true;
+        _hasShownPendingJobsPrompt = true;
     }
 
     private async Task PollJobsAsync()
@@ -446,6 +453,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void Logout()
     {
         CleanupClient();
+        _hasShownPendingJobsPrompt = false;
         _settings.Email = string.Empty;
         _settings.Password = string.Empty;
         _settings.Save();
