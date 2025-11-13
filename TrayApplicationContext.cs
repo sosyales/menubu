@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Net.NetworkInformation;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Microsoft.Win32;
 using MenuBuPrinterAgent.Printing;
 using MenuBuPrinterAgent.Services;
 using MenuBuPrinterAgent.UI;
@@ -29,11 +31,16 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly PrinterManager _printerManager;
     private MenuBuApiClient? _apiClient;
     private readonly System.Windows.Forms.Timer _pollTimer;
+    private readonly System.Threading.Timer _connectionGuardTimer;
     private readonly SynchronizationContext _syncContext;
     private readonly SemaphoreSlim _pollLock = new(1, 1);
     private bool _initialPromptCompleted;
     private bool _isDisposed;
     private bool _isConnected;
+    private bool _exitRequested;
+    private bool _systemShutdown;
+    private bool _reconnectInProgress;
+    private DateTime _lastSuccessfulPoll = DateTime.UtcNow;
     private readonly HashSet<int> _ignoredJobIds = new();
     private readonly HashSet<int> _processedJobIds = new();
     private readonly HashSet<int> _inFlightJobIds = new();
@@ -42,6 +49,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     public TrayApplicationContext()
     {
         _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
+        AutoStartManager.EnsureStartupEntry();
         _printerManager = new PrinterManager(_httpClient)
         {
             SelectedPrinter = _settings.PrinterName
@@ -49,6 +57,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _pollTimer = new System.Windows.Forms.Timer { Interval = 3000 };
         _pollTimer.Tick += async (_, _) => await PollJobsAsync();
+        _connectionGuardTimer = new System.Threading.Timer(_ => CheckConnectionHealth(), null, TimeSpan.FromSeconds(45), TimeSpan.FromSeconds(45));
+        NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
+        SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        SystemEvents.SessionEnding += (_, _) =>
+        {
+            _systemShutdown = true;
+            _exitRequested = true;
+            ExitThread();
+        };
 
         _trayIcon = new NotifyIcon
         {
@@ -245,6 +262,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             try
             {
                 jobs = await _apiClient.GetPendingJobsAsync(CancellationToken.None);
+                _lastSuccessfulPoll = DateTime.UtcNow;
+                _reconnectInProgress = false;
                 if (!_isConnected)
                 {
                     ShowStatus($"Bağlandı: {_apiClient.BusinessName}", connected: true);
@@ -255,6 +274,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             {
                 ShowStatus($"Bağlantı hatası: {ex.Message}", connected: false);
                 NotifyConnectionLost(ex.Message);
+                _lastConnectionError = ex.Message;
                 return;
             }
 
@@ -531,6 +551,20 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
+        if (!_systemShutdown && !_exitRequested)
+        {
+            var result = MessageBox.Show(
+                "Uygulamayı kapatırsanız yazdırma işlemleri durur. Çıkmak istediğinize emin misiniz?",
+                "MenuBu Yazıcı Ajanı",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+            if (result != DialogResult.Yes)
+            {
+                return;
+            }
+            _exitRequested = true;
+        }
+
         if (_isDisposed)
         {
             base.ExitThreadCore();
@@ -539,6 +573,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _isDisposed = true;
         CleanupClient();
+        _connectionGuardTimer.Dispose();
+        NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
+        SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         _trayIcon.Visible = false;
         _trayIcon.Dispose();
         _httpClient.Dispose();
@@ -587,6 +624,49 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _lastConnectionError = null;
         _syncContext.Post(_ =>
             _trayIcon.ShowBalloonTip(2000, "Bağlantı Kuruldu", "Sunucuya bağlantı yeniden sağlandı.", ToolTipIcon.Info), null);
+    }
+
+    private void CheckConnectionHealth()
+    {
+        if (_apiClient == null || !_isConnected || _reconnectInProgress)
+        {
+            return;
+        }
+
+        if (DateTime.UtcNow - _lastSuccessfulPoll < TimeSpan.FromSeconds(60))
+        {
+            return;
+        }
+
+        _reconnectInProgress = true;
+        _syncContext.Post(async _ =>
+        {
+            try
+            {
+                await ReconnectAsync();
+            }
+            finally
+            {
+                _reconnectInProgress = false;
+            }
+        }, null);
+    }
+
+    private void OnNetworkAvailabilityChanged(object? sender, NetworkAvailabilityEventArgs e)
+    {
+        if (!e.IsAvailable || string.IsNullOrWhiteSpace(_settings.Email))
+        {
+            return;
+        }
+        _syncContext.Post(async _ => await ReconnectAsync(), null);
+    }
+
+    private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode == PowerModes.Resume && !string.IsNullOrWhiteSpace(_settings.Email))
+        {
+            _syncContext.Post(async _ => await ReconnectAsync(), null);
+        }
     }
 
     private string? SelectPrinterForJob(Models.PrintJob job)

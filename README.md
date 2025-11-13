@@ -70,6 +70,21 @@ dotnet run
 
 GitHub Actions otomatik olarak her push'ta derler ve release oluşturur.
 
+Repo'ya push attığınızda `.github/workflows/build-printer-agent.yml` çalışır; runner üzerinde:
+
+1. `dotnet publish` ile self-contained `publish/win-x64` çıktısı üretir
+2. Inno Setup'u kurup `Installer/MenuBuPrinterAgent.iss` ile Program Files kurulum exe'si hazırlar
+3. Her iki çıktı da pipeline artefaktı olarak eklenir (Actions sekmesinden indirilebilir)
+
+Kendi makinenizde self-contained paket üretmek için:
+
+```powershell
+cd Yazici\build
+.\publish-selfcontained.ps1
+```
+
+Bu adım `publish\win-x64` klasörünü oluşturur. Ardından Inno Setup ile `Installer/MenuBuPrinterAgent.iss` dosyasını açıp `Build` diyerek kurulum paketi alabilirsiniz. Installer eski sürümü otomatik kaldırır, Program Files'a kurulumu yapar ve başlangıca ekler.
+
 ## 🔄 GitHub'a Push Etme
 
 ```bash

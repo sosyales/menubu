@@ -1154,22 +1154,12 @@ internal sealed class PrinterManager : IDisposable
             return;
         }
 
-        AddColumns(content, new[]
+        content.Lines.Add(new PrintLine
         {
-            new PrintColumn
-            {
-                Text = label,
-                Style = PrintLineStyle.Bold,
-                Alignment = PrintLineAlignment.Left,
-                WidthFraction = 0.32f
-            },
-            new PrintColumn
-            {
-                Text = value.Trim(),
-                Style = PrintLineStyle.Normal,
-                Alignment = PrintLineAlignment.Left,
-                WidthFraction = 0.68f
-            }
+            Kind = PrintLineKind.Text,
+            Text = $"{label}: {value.Trim()}",
+            Style = PrintLineStyle.Normal,
+            Alignment = PrintLineAlignment.Left
         });
     }
 
