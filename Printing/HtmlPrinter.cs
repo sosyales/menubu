@@ -144,9 +144,9 @@ internal sealed class HtmlPrinter : IDisposable
                 return;
             }
 
-            if (lastStatus is CoreWebView2PrintStatus.PrinterUnavailable or CoreWebView2PrintStatus.PrinterFull or CoreWebView2PrintStatus.PrinterOutOfPaper)
+            if (lastStatus == CoreWebView2PrintStatus.PrinterUnavailable)
             {
-                throw new InvalidOperationException($"Yazdırma başarısız: {lastStatus}.");
+                throw new InvalidOperationException("Yazdırma başarısız: Yazıcıya ulaşılamadı.");
             }
 
             await Task.Delay(200 * attempt, cancellationToken);
