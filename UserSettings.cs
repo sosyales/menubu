@@ -14,6 +14,8 @@ internal sealed class UserSettings
     public int FontSizeAdjustment { get; set; } = 0;
     public bool LaunchAtStartup { get; set; } = true;
     public Dictionary<string, string> PrinterMappings { get; set; } = new();
+    public bool EnablePushChannel { get; set; } = true;
+    public string PushEndpoint { get; set; } = "wss://menubu.com.tr/ws/print-jobs";
 
     private static readonly string SettingsPath =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MenuBu", "printer-agent.json");
@@ -59,4 +61,3 @@ internal sealed class UserSettings
         }
     }
 }
-

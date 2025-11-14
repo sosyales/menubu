@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Printing;
 using System.Globalization;
@@ -81,156 +80,23 @@ internal sealed class PrinterManager : IDisposable
         await PrintAsync(content, cancellationToken);
     }
 
-    private async Task PrintAsync(PrintContent content, CancellationToken cancellationToken)
+    private Task PrintAsync(PrintContent content, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(content.Html))
+        var html = content.Html;
+        if (string.IsNullOrWhiteSpace(html))
         {
-            try
+            if (content.Lines.Count == 0)
             {
-                _htmlPrinter.SelectedPrinter = SelectedPrinter;
-                _htmlPrinter.PrinterWidth = PrinterWidth;
-                await _htmlPrinter.PrintHtmlAsync(content.Html, cancellationToken);
-                return;
+                throw new InvalidOperationException("Yazdırılacak veri bulunamadı.");
             }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"[PrinterManager] HTML yazdırma başarısız, düz metne düşülüyor: {ex}");
-                ConvertHtmlToLines(content);
-                content.Html = null;
-            }
+
+            html = ReceiptHtmlRenderer.Render(content, PrinterWidth);
+            content.Html = html;
         }
 
-        await Task.Run(() =>
-        {
-            lock (_printLock)
-            {
-                var lineEnumerator = content.Lines.GetEnumerator();
-                var qrImage = content.QrImage;
-                using var printDocument = new PrintDocument();
-                try
-                {
-                    if (!string.IsNullOrWhiteSpace(SelectedPrinter))
-                    {
-                        printDocument.PrinterSettings.PrinterName = SelectedPrinter;
-                        if (!printDocument.PrinterSettings.IsValid)
-                        {
-                            throw new InvalidPrinterException($"Yazıcı '{SelectedPrinter}' geçersiz veya erişilebilir değil.");
-                        }
-                    }
-                    // Else: Varsayılan yazıcı kullanılacak (PrintDocument otomatik seçer)
-                }
-                catch (InvalidPrinterException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidPrinterException($"Yazıcı ayarları kontrol edilemedi: {ex.Message}", ex);
-                }
-                printDocument.OriginAtMargins = false;
-                printDocument.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
-                try { ApplyPaperSize(printDocument); } catch { }
-                printDocument.PrintPage += (sender, e) =>
-                {
-                    try
-                    {
-                        if (e.Graphics == null) { e.HasMorePages = false; return; }
-                        var graphics = e.Graphics;
-                        var marginBounds = e.MarginBounds;
-                        if (marginBounds.Width <= 0 || marginBounds.Height <= 0)
-                        {
-                            var clip = graphics.VisibleClipBounds;
-                            marginBounds = new Rectangle((int)clip.Left, (int)clip.Top, (int)clip.Width, (int)clip.Height);
-                        }
-                        var horizontalPadding = GetHorizontalPadding();
-                        var verticalPadding = GetVerticalPadding();
-                        var contentWidth = Math.Max(20f, marginBounds.Width - (horizontalPadding * 2));
-                        var left = marginBounds.Left + horizontalPadding;
-                        var top = marginBounds.Top + verticalPadding;
-                        var bottomLimit = marginBounds.Bottom - verticalPadding;
-                        var layoutBounds = new RectangleF(left, top, contentWidth, bottomLimit - top);
-                        float y = layoutBounds.Top;
-                        var defaultLineHeight = ResolveFont(PrintLineStyle.Normal).GetHeight(graphics) + 2;
-                        while (lineEnumerator.MoveNext())
-                        {
-                            var line = lineEnumerator.Current;
-                            switch (line.Kind)
-                            {
-                                case PrintLineKind.Spacer:
-                                    var spacing = line.CustomSpacing ?? (defaultLineHeight / 2f);
-                                    if (y + spacing > layoutBounds.Bottom) { e.HasMorePages = true; return; }
-                                    y += spacing;
-                                    continue;
-                                case PrintLineKind.Separator:
-                                    var thickness = line.CustomSpacing ?? 6f;
-                                    if (!DrawSeparator(graphics, layoutBounds, ref y, thickness)) { e.HasMorePages = true; return; }
-                                    continue;
-                                case PrintLineKind.Columns:
-                                    if (!DrawColumns(graphics, line, layoutBounds, ref y)) { e.HasMorePages = true; return; }
-                                    continue;
-                            }
-                            var font = ResolveFont(line.Style);
-                            var lineHeight = font.GetHeight(graphics) + 2;
-                            if (!DrawWrappedText(graphics, line, font, layoutBounds, ref y, lineHeight)) { e.HasMorePages = true; return; }
-                            if (line.CustomSpacing.HasValue && line.CustomSpacing.Value > 0)
-                            {
-                                if (y + line.CustomSpacing.Value > layoutBounds.Bottom) { e.HasMorePages = true; return; }
-                                y += line.CustomSpacing.Value;
-                            }
-                        }
-                        if (qrImage != null)
-                        {
-                            var qrSize = Math.Min((int)(contentWidth * 0.75f), 220);
-                            if (y + qrSize > layoutBounds.Bottom) { e.HasMorePages = true; return; }
-                            var qrLeft = left + (contentWidth - qrSize) / 2f;
-                            var destRect = new Rectangle((int)qrLeft, (int)y + 10, qrSize, qrSize);
-                            graphics.DrawImage(qrImage, destRect);
-                        }
-                        e.HasMorePages = false;
-                    }
-                    catch (Exception ex)
-                    {
-                        e.HasMorePages = false;
-                        throw new Exception($"PrintPage event hatası: {ex.GetType().Name} - {ex.Message}", ex);
-                    }
-                };
-                Exception? printException = null;
-                try
-                {
-                    printDocument.PrintController = new StandardPrintController();
-                    printDocument.Print();
-                }
-                catch (Exception ex)
-                {
-                    printException = ex;
-                }
-                finally
-                {
-                    lineEnumerator.Dispose();
-                    qrImage?.Dispose();
-                }
-                
-                if (printException != null)
-                {
-                    var printerName = printDocument.PrinterSettings?.PrinterName ?? "(varsayılan)";
-                    var errorDetails = $"Yazıcı: {printerName}, Hata: {printException.GetType().Name}";
-                    
-                    if (printException.InnerException != null)
-                    {
-                        errorDetails += $", Inner: {printException.InnerException.GetType().Name} - {printException.InnerException.Message}";
-                    }
-                    
-                    errorDetails += $", Message: {printException.Message}";
-                    
-                    if (printException.StackTrace != null && printException.StackTrace.Contains("PrintPage"))
-                    {
-                        errorDetails += " | Hata PrintPage event'inde oluştu. Muhtemelen içerik render hatası.";
-                    }
-                    
-                    throw new Exception(errorDetails, printException);
-                }
-            }
-        }, cancellationToken);
+        _htmlPrinter.SelectedPrinter = SelectedPrinter;
+        _htmlPrinter.PrinterWidth = PrinterWidth;
+        return _htmlPrinter.PrintHtmlAsync(html, cancellationToken);
     }
 
 
@@ -901,41 +767,6 @@ internal sealed class PrinterManager : IDisposable
         }
 
         return true;
-    }
-
-    private void ConvertHtmlToLines(PrintContent content)
-    {
-        if (content == null || string.IsNullOrWhiteSpace(content.Html))
-        {
-            return;
-        }
-
-        if (content.Lines.Count > 0)
-        {
-            return;
-        }
-
-        foreach (var textLine in ExtractTextLines(content.Html))
-        {
-            AddLine(content, textLine);
-        }
-    }
-
-    private static IEnumerable<string> ExtractTextLines(string html)
-    {
-        var withoutScripts = Regex.Replace(html, "<(script|style)[^>]*?>.*?</\\1>", string.Empty,
-            RegexOptions.Singleline | RegexOptions.IgnoreCase);
-        var breakTags = Regex.Replace(withoutScripts, "<(br|p|div|tr|li)[^>]*>", "\n",
-            RegexOptions.IgnoreCase);
-        var text = Regex.Replace(breakTags, "<.*?>", " ", RegexOptions.Singleline);
-        foreach (var line in text.Split('\n'))
-        {
-            var trimmed = System.Net.WebUtility.HtmlDecode(line.Trim());
-            if (!string.IsNullOrEmpty(trimmed))
-            {
-                yield return trimmed;
-            }
-        }
     }
 
     private static void AddLine(PrintContent content, string raw, PrintLineStyle? forcedStyle = null)

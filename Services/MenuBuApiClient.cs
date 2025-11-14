@@ -23,6 +23,9 @@ internal sealed class MenuBuApiClient : IDisposable
     public string BusinessName { get; private set; } = "MenuBu";
     public string PrinterWidth { get; private set; } = "58mm";
     public IReadOnlyList<PrinterConfig> PrinterConfigs { get; private set; } = Array.Empty<PrinterConfig>();
+    internal string Email => _email;
+    internal string Password => _password;
+    internal static string AgentVersion => _agentVersion;
 
     public MenuBuApiClient(string email, string password, HttpMessageHandler? handler = null)
     {
@@ -168,7 +171,7 @@ internal sealed class MenuBuApiClient : IDisposable
             : _email;
     }
 
-    private static PrintJob ParseJob(JsonElement jobEl)
+    internal static PrintJob ParseJob(JsonElement jobEl)
     {
         var payloadJson = jobEl.GetProperty("payload").GetString() ?? "{}";
         var created = jobEl.TryGetProperty("created_at", out var createdEl) && DateTime.TryParse(createdEl.GetString(), out var parsed)

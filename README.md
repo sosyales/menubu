@@ -66,6 +66,18 @@ dotnet build
 dotnet run
 ```
 
+## ⚡ Anlık Yazdırma
+
+- Ajan varsayılan olarak `wss://menubu.com.tr/ws/print-jobs` adresine WebSocket bağlantısı açar ve yeni işleri anında alır.
+- Push kanalını veya endpoint adresini değiştirmek isterseniz `AppData\Roaming\MenuBu\printer-agent.json` içindeki `EnablePushChannel` ve `PushEndpoint` alanlarını düzenleyebilirsiniz.
+- Sunucu push kanalı kapalıysa ajan otomatik olarak mevcut REST kuyruğu üzerinden polling’e geri döner.
+
+## 🎨 HTML Tasarımı
+
+- Tüm fişler HTML olarak aynı şablondan çıkar. Margin ve genişlik ayarlarını `Printing/ReceiptHtmlRenderer.cs` içindeki `GetBaseStyles` metodundan değiştirebilirsiniz.
+- Sunucudan gelen HTML içerikleri yazıcı genişliğine göre tekrar stillenir; bu ayarlar `Printing/HtmlPrinter.cs` dosyasındaki `PrepareHtml` metodunda tutulur.
+- Yapılan CSS değişiklikleri ajanı yeniden başlattığınızda otomatik yüklenir.
+
 ## 📦 Build
 
 GitHub Actions otomatik olarak her push'ta derler ve release oluşturur.

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Net.NetworkInformation;
@@ -29,6 +30,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly UserSettings _settings = UserSettings.Load();
     private readonly HttpClient _httpClient = new();
     private readonly PrinterManager _printerManager;
+    private PrintJobPushClient? _pushClient;
     private MenuBuApiClient? _apiClient;
     private readonly System.Windows.Forms.Timer _pollTimer;
     private readonly System.Threading.Timer _connectionGuardTimer;
@@ -192,12 +194,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _clearQueueMenuItem.Enabled = true;
 
         ShowStatus($"Bağlandı: {_apiClient.BusinessName}", connected: true);
-        
-        if (!silent)
-        {
-            _syncContext.Post(_ => 
-                _trayIcon.ShowBalloonTip(2000, "Bağlantı Başarılı", $"{_apiClient.BusinessName} - Yazdırma hizmeti aktif.", ToolTipIcon.Info), null);
-        }
+        RestartPushChannel();
 
         EnsureTimer();
         await HandleInitialJobsAsync(initialJobs);
@@ -339,9 +336,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 await SafeUpdateJobStatus(job.Id, "printed", null);
                 _processedJobIds.Add(job.Id);
                 
-                // Başarılı yazdırma bildirimi (sessiz)
-                _syncContext.Post(_ => 
-                    _trayIcon.ShowBalloonTip(1500, "Yazdırıldı", $"İş #{job.Id} başarıyla yazdırıldı.", ToolTipIcon.Info), null);
             }
             finally
             {
@@ -514,6 +508,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _pollTimer.Stop();
         }
         _pollLock.Reset();
+        StopPushChannel();
         _apiClient?.Dispose();
         _apiClient = null;
         _initialPromptCompleted = false;
@@ -521,6 +516,38 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _processedJobIds.Clear();
         _inFlightJobIds.Clear();
         _lastConnectionError = null;
+    }
+
+    private void RestartPushChannel()
+    {
+        StopPushChannel();
+        if (!_settings.EnablePushChannel || string.IsNullOrWhiteSpace(_settings.PushEndpoint) || _apiClient == null)
+        {
+            return;
+        }
+
+        if (!Uri.TryCreate(_settings.PushEndpoint, UriKind.Absolute, out var endpoint))
+        {
+            return;
+        }
+
+        _pushClient = new PrintJobPushClient(endpoint, MenuBuApiClient.ParseJob);
+        _pushClient.JobsReceived += OnPushJobsReceived;
+        _pushClient.ConnectionError += OnPushChannelError;
+        _pushClient.Start(_settings.Email, _settings.Password, _apiClient.BusinessId, MenuBuApiClient.AgentVersion);
+    }
+
+    private void StopPushChannel()
+    {
+        if (_pushClient == null)
+        {
+            return;
+        }
+
+        _pushClient.JobsReceived -= OnPushJobsReceived;
+        _pushClient.ConnectionError -= OnPushChannelError;
+        _pushClient.Dispose();
+        _pushClient = null;
     }
 
     private async Task ClearQueueAsync()
@@ -633,8 +660,24 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
 
         _lastConnectionError = null;
-        _syncContext.Post(_ =>
-            _trayIcon.ShowBalloonTip(2000, "Bağlantı Kuruldu", "Sunucuya bağlantı yeniden sağlandı.", ToolTipIcon.Info), null);
+    }
+
+    private void OnPushJobsReceived(IReadOnlyList<Models.PrintJob> jobs)
+    {
+        foreach (var job in jobs.OrderBy(j => j.CreatedAt))
+        {
+            if (_ignoredJobIds.Contains(job.Id) || _processedJobIds.Contains(job.Id) || _inFlightJobIds.Contains(job.Id))
+            {
+                continue;
+            }
+
+            _ = ProcessJobAsync(job);
+        }
+    }
+
+    private void OnPushChannelError(string message)
+    {
+        Debug.WriteLine($"[PushChannel] {message}");
     }
 
     private void CheckConnectionHealth()

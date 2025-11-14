@@ -155,8 +155,7 @@ internal sealed class HtmlPrinter : IDisposable
         throw new InvalidOperationException($"Yazdırma başarısız: {lastStatus}.");
     }
 
-    private double GetScaleFactor() =>
-        PrinterWidth.StartsWith("80", StringComparison.OrdinalIgnoreCase) ? 1.0 : 0.78;
+    private double GetScaleFactor() => 1.0;
 
     private string PrepareHtml(string html)
     {
