@@ -404,20 +404,20 @@ internal sealed class PrinterManager : IDisposable
         }
 
         var content = new PrintContent();
-        if (root.TryGetProperty("lines", out var linesElement) && linesElement.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var line in linesElement.EnumerateArray())
-            {
-                AddLine(content, line.GetString() ?? string.Empty);
-            }
-        }
-        else if (root.TryGetProperty("html", out var htmlElement))
+        if (root.TryGetProperty("html", out var htmlElement) && htmlElement.ValueKind == JsonValueKind.String)
         {
             var html = htmlElement.GetString();
             if (!string.IsNullOrWhiteSpace(html))
             {
                 content.Html = html;
                 return content;
+            }
+        }
+        if (root.TryGetProperty("lines", out var linesElement) && linesElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var line in linesElement.EnumerateArray())
+            {
+                AddLine(content, line.GetString() ?? string.Empty);
             }
         }
         else if (root.TryGetProperty("print_url", out var printUrlElement))
