@@ -491,7 +491,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         void Show()
         {
-            _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", _statusMenuItem.Text, _isConnected ? ToolTipIcon.Info : ToolTipIcon.Warning);
+            var tipText = string.IsNullOrWhiteSpace(_statusMenuItem.Text)
+                ? "Durum bilgisi alınamadı"
+                : _statusMenuItem.Text;
+            _trayIcon.ShowBalloonTip(2000, "MenuBu Yazıcı", tipText, _isConnected ? ToolTipIcon.Info : ToolTipIcon.Warning);
         }
 
         if (SynchronizationContext.Current == _syncContext)

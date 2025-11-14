@@ -125,7 +125,7 @@ internal sealed class HtmlPrinter : IDisposable
             settings.PrinterName = SelectedPrinter;
         }
 
-        var status = await coreWebView2.PrintAsync(CoreWebView2PrintTarget.Printer, settings);
+        var status = await coreWebView2.PrintAsync(settings);
         if (status != CoreWebView2PrintStatus.Succeeded)
         {
             throw new InvalidOperationException($"Yazdırma başarısız: {status}");
