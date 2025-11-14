@@ -85,13 +85,7 @@ internal sealed class PrinterManager : IDisposable
         var html = content.Html;
         if (string.IsNullOrWhiteSpace(html))
         {
-            if (content.Lines.Count == 0)
-            {
-                throw new InvalidOperationException("Yazdırılacak veri bulunamadı.");
-            }
-
-            html = ReceiptHtmlRenderer.Render(content, PrinterWidth);
-            content.Html = html;
+            throw new InvalidOperationException("Yazdırılacak HTML içeriği bulunamadı. Lütfen paneldeki yazdırma seçeneğini kullanarak tarayıcıdan yazdırın.");
         }
 
         _htmlPrinter.SelectedPrinter = SelectedPrinter;
@@ -403,24 +397,15 @@ internal sealed class PrinterManager : IDisposable
             PrinterWidth = widthElement.GetString() ?? PrinterWidth;
         }
 
-        var content = new PrintContent();
         if (root.TryGetProperty("html", out var htmlElement) && htmlElement.ValueKind == JsonValueKind.String)
         {
             var html = htmlElement.GetString();
             if (!string.IsNullOrWhiteSpace(html))
             {
-                content.Html = html;
-                return content;
+                return new PrintContent { Html = html };
             }
         }
-        if (root.TryGetProperty("lines", out var linesElement) && linesElement.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var line in linesElement.EnumerateArray())
-            {
-                AddLine(content, line.GetString() ?? string.Empty);
-            }
-        }
-        else if (root.TryGetProperty("print_url", out var printUrlElement))
+        if (root.TryGetProperty("print_url", out var printUrlElement))
         {
             var printUrl = printUrlElement.GetString();
             if (!string.IsNullOrWhiteSpace(printUrl))
@@ -437,9 +422,7 @@ internal sealed class PrinterManager : IDisposable
             }
         }
 
-        TryLoadQrImage(content, root);
-
-        return content;
+        throw new InvalidOperationException("Bu yazdırma işi HTML içermiyor. Lütfen paneldeki yazdırma seçeneğini kullanarak tarayıcıdan yazdırın.");
     }
 
     private PrintContent BuildContentFromRemoteUrl(string url)
@@ -479,25 +462,7 @@ internal sealed class PrinterManager : IDisposable
                 }
             }
 
-            if (responseRoot.TryGetProperty("lines", out var linesEl) && linesEl.ValueKind == JsonValueKind.Array)
-            {
-                var lineCount = 0;
-                foreach (var line in linesEl.EnumerateArray())
-                {
-                    AddLine(remoteContent, line.GetString() ?? string.Empty);
-                    lineCount++;
-                }
-
-                if (lineCount == 0)
-                {
-                    throw new Exception("Fiş içeriği boş");
-                }
-
-                TryLoadQrImage(remoteContent, responseRoot);
-                return remoteContent;
-            }
-
-            throw new Exception("JSON'da 'html' veya 'lines' alanı bulunamadı");
+            throw new Exception("Sunucudan HTML içeriği alınamadı.");
         }
         catch (HttpRequestException ex)
         {
