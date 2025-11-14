@@ -126,9 +126,9 @@ internal sealed class PrintJobPushClient : IDisposable
             if (root.TryGetProperty("jobs", out var jobsEl) && jobsEl.ValueKind == JsonValueKind.Array)
             {
                 var jobs = new List<PrintJob>();
-                foreach (var jobEl in jobsEl.EnumerateArray())
+                foreach (var jobNode in jobsEl.EnumerateArray())
                 {
-                    jobs.Add(_jobFactory(jobEl));
+                    jobs.Add(_jobFactory(jobNode));
                 }
 
                 if (jobs.Count > 0)
@@ -138,9 +138,9 @@ internal sealed class PrintJobPushClient : IDisposable
                 return;
             }
 
-            if (root.TryGetProperty("job", out var jobEl) && jobEl.ValueKind == JsonValueKind.Object)
+            if (root.TryGetProperty("job", out var singleJobNode) && singleJobNode.ValueKind == JsonValueKind.Object)
             {
-                var job = _jobFactory(jobEl);
+                var job = _jobFactory(singleJobNode);
                 JobsReceived?.Invoke(new[] { job });
             }
         }
