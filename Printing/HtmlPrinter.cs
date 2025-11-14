@@ -161,8 +161,9 @@ internal sealed class HtmlPrinter : IDisposable
     private string PrepareHtml(string html)
     {
         var targetWidth = PrinterWidth.StartsWith("80", StringComparison.OrdinalIgnoreCase) ? "80mm" : "58mm";
+        var printableWidth = $"calc({targetWidth} - 4mm)";
         var styleBlock =
-            $"<style id=\"menubu-print-style\">@page{{size:{targetWidth} auto;margin:0;}}html,body{{margin:0;padding:0;width:{targetWidth};max-width:{targetWidth};}}body{{font-family:'Segoe UI','Arial',sans-serif;font-size:12px;line-height:1.3;}}img,table{{max-width:100%;}}*{{box-sizing:border-box;word-break:break-word;}}</style>";
+            $"<style id=\"menubu-print-style\">@page{{size:{targetWidth} auto;margin:0;}}html,body{{margin:0;padding:0;width:{targetWidth};max-width:{targetWidth};}}body{{margin:0 auto;padding:0 2mm;width:{printableWidth};max-width:{printableWidth};font-family:'Segoe UI','Arial',sans-serif;font-size:12px;line-height:1.3;}}img,table{{max-width:100%;}}*{{box-sizing:border-box;word-break:break-word;}}</style>";
 
         if (string.IsNullOrWhiteSpace(html))
         {

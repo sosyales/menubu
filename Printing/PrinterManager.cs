@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Printing;
 using System.Globalization;
@@ -76,36 +77,30 @@ internal sealed class PrinterManager : IDisposable
 
     public async Task PrintAsync(JsonDocument payloadDoc, CancellationToken cancellationToken)
     {
-        var root = payloadDoc.RootElement;
-        
-        // HTML varsa direkt WebView2 ile yazdır
-        if (root.TryGetProperty("html", out var htmlElement) && htmlElement.ValueKind == JsonValueKind.String)
-        {
-            var html = htmlElement.GetString();
-            if (!string.IsNullOrWhiteSpace(html))
-            {
-                _htmlPrinter.SelectedPrinter = SelectedPrinter;
-                _htmlPrinter.PrinterWidth = PrinterWidth;
-                await _htmlPrinter.PrintHtmlAsync(html, cancellationToken);
-                return;
-            }
-        }
-        
-        // Yoksa eski yöntemle devam et
         var content = BuildContent(payloadDoc);
         await PrintAsync(content, cancellationToken);
     }
 
-    private Task PrintAsync(PrintContent content, CancellationToken cancellationToken)
+    private async Task PrintAsync(PrintContent content, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(content.Html))
         {
-            _htmlPrinter.SelectedPrinter = SelectedPrinter;
-            _htmlPrinter.PrinterWidth = PrinterWidth;
-            return _htmlPrinter.PrintHtmlAsync(content.Html, cancellationToken);
+            try
+            {
+                _htmlPrinter.SelectedPrinter = SelectedPrinter;
+                _htmlPrinter.PrinterWidth = PrinterWidth;
+                await _htmlPrinter.PrintHtmlAsync(content.Html, cancellationToken);
+                return;
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"[PrinterManager] HTML yazdırma başarısız, düz metne düşülüyor: {ex}");
+                ConvertHtmlToLines(content);
+                content.Html = null;
+            }
         }
-        
-        return Task.Run(() =>
+
+        await Task.Run(() =>
         {
             lock (_printLock)
             {
@@ -906,6 +901,24 @@ internal sealed class PrinterManager : IDisposable
         }
 
         return true;
+    }
+
+    private void ConvertHtmlToLines(PrintContent content)
+    {
+        if (content == null || string.IsNullOrWhiteSpace(content.Html))
+        {
+            return;
+        }
+
+        if (content.Lines.Count > 0)
+        {
+            return;
+        }
+
+        foreach (var textLine in ExtractTextLines(content.Html))
+        {
+            AddLine(content, textLine);
+        }
     }
 
     private static IEnumerable<string> ExtractTextLines(string html)
