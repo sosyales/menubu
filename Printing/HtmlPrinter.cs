@@ -27,7 +27,8 @@ internal sealed class HtmlPrinter : IDisposable
             throw new InvalidOperationException("WebView2 başlatılamadı");
         }
 
-        await LoadHtmlAsync(html, cancellationToken);
+        var preparedHtml = PrepareHtml(html);
+        await LoadHtmlAsync(preparedHtml, cancellationToken);
 
         try
         {
@@ -145,13 +146,47 @@ internal sealed class HtmlPrinter : IDisposable
             document.close();
         ");
 
-        await Task.Delay(500, cancellationToken);
+        await Task.Delay(250, cancellationToken);
         await _webView.CoreWebView2.ExecuteScriptAsync("window.print();");
-        await Task.Delay(1000, cancellationToken);
+        await Task.Delay(400, cancellationToken);
     }
 
     private double GetScaleFactor() =>
         PrinterWidth.StartsWith("80", StringComparison.OrdinalIgnoreCase) ? 1.0 : 0.78;
+
+    private string PrepareHtml(string html)
+    {
+        var targetWidth = PrinterWidth.StartsWith("80", StringComparison.OrdinalIgnoreCase) ? "80mm" : "58mm";
+        var styleBlock =
+            $"<style id=\"menubu-print-style\">@page{{size:{targetWidth} auto;margin:0;}}html,body{{margin:0;padding:0;width:{targetWidth};max-width:{targetWidth};}}body{{font-family:'Segoe UI','Arial',sans-serif;font-size:12px;line-height:1.3;}}img,table{{max-width:100%;}}*{{box-sizing:border-box;word-break:break-word;}}</style>";
+
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return $"<!DOCTYPE html><html><head>{styleBlock}</head><body></body></html>";
+        }
+
+        var headIndex = html.IndexOf("<head", StringComparison.OrdinalIgnoreCase);
+        if (headIndex >= 0)
+        {
+            var headCloseIndex = html.IndexOf('>', headIndex);
+            if (headCloseIndex >= 0)
+            {
+                return html.Insert(headCloseIndex + 1, styleBlock);
+            }
+        }
+
+        var htmlIndex = html.IndexOf("<html", StringComparison.OrdinalIgnoreCase);
+        if (htmlIndex >= 0)
+        {
+            var htmlCloseIndex = html.IndexOf('>', htmlIndex);
+            if (htmlCloseIndex >= 0)
+            {
+                return html.Insert(htmlCloseIndex + 1, $"<head>{styleBlock}</head>");
+            }
+        }
+
+        return $"<!DOCTYPE html><html><head>{styleBlock}</head><body>{html}</body></html>";
+    }
 
     public void Dispose()
     {
