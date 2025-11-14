@@ -1,0 +1,51 @@
+name: Build Printer Agent (Local Bridge)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'YaziciLocalBridge/**'
+      - '.github/workflows/build-printer-agent-local-bridge.yml'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore YaziciLocalBridge/MenuBuPrinterAgent.csproj
+
+      - name: Publish self-contained package
+        run: dotnet publish YaziciLocalBridge/MenuBuPrinterAgent.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o .\YaziciLocalBridge\publish\win-x64
+
+      - name: Download WebView2 Runtime
+        run: |
+          $destDir = "YaziciLocalBridge\Installer\Dependencies"
+          New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+          Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile "$destDir\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes
+
+      - name: Build installer
+        run: '"C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe" YaziciLocalBridge\\Installer\\MenuBuPrinterAgent.iss'
+
+      - name: Upload publish artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: printer-agent-localbridge-publish
+          path: YaziciLocalBridge/publish/win-x64
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: printer-agent-localbridge-installer
+          path: YaziciLocalBridge/dist/*.exe
