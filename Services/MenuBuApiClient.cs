@@ -25,6 +25,7 @@ internal sealed class MenuBuApiClient : IDisposable
     public IReadOnlyList<PrinterConfig> PrinterConfigs { get; private set; } = Array.Empty<PrinterConfig>();
     internal string Email => _email;
     internal string Password => _password;
+    public string? ApiKey => _apiKey;
     internal static string AgentVersion => _agentVersion;
 
     public MenuBuApiClient(string email, string password, HttpMessageHandler? handler = null)
@@ -171,22 +172,214 @@ internal sealed class MenuBuApiClient : IDisposable
             : _email;
     }
 
+    public async Task SendHeartbeatAsync(CancellationToken cancellationToken)
+    {
+        if (BusinessId <= 0)
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_apiKey))
+        {
+            await EnsureApiKeyAsync(cancellationToken);
+        }
+
+        if (string.IsNullOrEmpty(_apiKey))
+        {
+            return;
+        }
+
+        var payload = new
+        {
+            business_id = BusinessId,
+            key = _apiKey,
+            agent_version = AgentVersion
+        };
+
+        using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        var endpoint = new Uri("https://menubu.com.tr/api/printer-agent-heartbeat.php");
+        using var response = await _httpClient.PostAsync(endpoint, content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     internal static PrintJob ParseJob(JsonElement jobEl)
     {
-        var payloadJson = jobEl.GetProperty("payload").GetString() ?? "{}";
         var created = jobEl.TryGetProperty("created_at", out var createdEl) && DateTime.TryParse(createdEl.GetString(), out var parsed)
             ? parsed
             : DateTime.UtcNow;
 
-        var payloadObject = JsonNode.Parse(payloadJson) as JsonObject ?? new JsonObject();
+        var jobType = jobEl.TryGetProperty("job_type", out var jobTypeEl) ? jobTypeEl.GetString() ?? "receipt" : "receipt";
+        var jobKind = jobEl.TryGetProperty("job_kind", out var jobKindEl) ? jobKindEl.GetString() ?? jobType : jobType;
+
+        var payloadVersion = 1;
+        if (jobEl.TryGetProperty("payload_version", out var payloadVersionEl))
+        {
+            if (payloadVersionEl.ValueKind == JsonValueKind.Number && payloadVersionEl.TryGetInt32(out var numericVersion))
+            {
+                payloadVersion = numericVersion;
+            }
+            else if (payloadVersionEl.ValueKind == JsonValueKind.String && int.TryParse(payloadVersionEl.GetString(), out var parsedVersion))
+            {
+                payloadVersion = parsedVersion;
+            }
+        }
+
+        var payloadObject = ParsePayload(jobEl);
+        var optionsObject = ParseOptions(jobEl);
+        var metadataObject = ParseMetadata(jobEl);
+        var printerTags = ParsePrinterTags(jobEl);
 
         return new PrintJob
         {
             Id = jobEl.GetProperty("id").GetInt32(),
-            JobType = jobEl.TryGetProperty("job_type", out var jobType) ? jobType.GetString() ?? "receipt" : "receipt",
+            JobType = jobType,
+            JobKind = jobKind,
+            PayloadVersion = payloadVersion,
             Payload = payloadObject,
+            Options = optionsObject,
+            Metadata = metadataObject,
+            PrinterTags = printerTags,
             CreatedAt = created
         };
+    }
+
+    private static JsonObject ParsePayload(JsonElement jobEl)
+    {
+        if (jobEl.TryGetProperty("payload", out var payloadEl))
+        {
+            return ParseJsonObject(payloadEl);
+        }
+
+        return new JsonObject();
+    }
+
+    private static JsonObject ParseOptions(JsonElement jobEl)
+    {
+        if (jobEl.TryGetProperty("options", out var optionsEl))
+        {
+            return ParseJsonObject(optionsEl);
+        }
+
+        if (jobEl.TryGetProperty("options_json", out var optionsJsonEl) && optionsJsonEl.ValueKind == JsonValueKind.String)
+        {
+            return ParseJsonObject(optionsJsonEl.GetString());
+        }
+
+        return new JsonObject();
+    }
+
+    private static JsonObject ParseMetadata(JsonElement jobEl)
+    {
+        if (jobEl.TryGetProperty("metadata", out var metadataEl))
+        {
+            return ParseJsonObject(metadataEl);
+        }
+
+        if (jobEl.TryGetProperty("metadata_json", out var metadataJsonEl) && metadataJsonEl.ValueKind == JsonValueKind.String)
+        {
+            return ParseJsonObject(metadataJsonEl.GetString());
+        }
+
+        return new JsonObject();
+    }
+
+    private static JsonObject ParseJsonObject(JsonElement element) =>
+        element.ValueKind switch
+        {
+            JsonValueKind.Object => JsonNode.Parse(element.GetRawText()) as JsonObject ?? new JsonObject(),
+            JsonValueKind.String => ParseJsonObject(element.GetString()),
+            _ => new JsonObject()
+        };
+
+    private static JsonObject ParseJsonObject(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new JsonObject();
+        }
+
+        try
+        {
+            return JsonNode.Parse(json) as JsonObject ?? new JsonObject();
+        }
+        catch
+        {
+            return new JsonObject();
+        }
+    }
+
+    private static IReadOnlyList<string> ParsePrinterTags(JsonElement jobEl)
+    {
+        if (jobEl.TryGetProperty("printer_tags", out var tagsEl))
+        {
+            return ExtractPrinterTags(tagsEl);
+        }
+
+        if (jobEl.TryGetProperty("printer_tags_json", out var tagsJsonEl) && tagsJsonEl.ValueKind == JsonValueKind.String)
+        {
+            return ParsePrinterTags(tagsJsonEl.GetString());
+        }
+
+        return Array.Empty<string>();
+    }
+
+    private static IReadOnlyList<string> ExtractPrinterTags(JsonElement tagsEl)
+    {
+        if (tagsEl.ValueKind == JsonValueKind.Array)
+        {
+            var tags = new List<string>();
+            foreach (var item in tagsEl.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    var tag = item.GetString();
+                    if (!string.IsNullOrWhiteSpace(tag))
+                    {
+                        tags.Add(tag);
+                    }
+                }
+            }
+            return tags;
+        }
+
+        if (tagsEl.ValueKind == JsonValueKind.String)
+        {
+            return ParsePrinterTags(tagsEl.GetString());
+        }
+
+        return Array.Empty<string>();
+    }
+
+    private static IReadOnlyList<string> ParsePrinterTags(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            var node = JsonNode.Parse(json);
+            if (node is JsonArray array)
+            {
+                var tags = new List<string>();
+                foreach (var entry in array)
+                {
+                    var tag = entry?.GetValue<string>();
+                    if (!string.IsNullOrWhiteSpace(tag))
+                    {
+                        tags.Add(tag);
+                    }
+                }
+                return tags;
+            }
+        }
+        catch
+        {
+            // ignore json parse failures
+        }
+
+        return new[] { json };
     }
 
     private async Task LoadPrinterConfigsAsync(CancellationToken cancellationToken)

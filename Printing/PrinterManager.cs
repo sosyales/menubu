@@ -420,90 +420,105 @@ internal sealed class PrinterManager : IDisposable
                 return content;
             }
         }
+        else if (root.TryGetProperty("print_url", out var printUrlElement))
+        {
+            var printUrl = printUrlElement.GetString();
+            if (!string.IsNullOrWhiteSpace(printUrl))
+            {
+                return BuildContentFromRemoteUrl(printUrl);
+            }
+        }
         else if (root.TryGetProperty("url", out var urlElement))
         {
             var url = urlElement.GetString();
             if (!string.IsNullOrWhiteSpace(url))
             {
-                try
-                {
-                    var jsonResponse = _httpClient.GetStringAsync(url).GetAwaiter().GetResult();
-                    
-                    if (string.IsNullOrWhiteSpace(jsonResponse))
-                    {
-                        throw new Exception("Sunucudan boş yanıt alındı");
-                    }
-                    
-                    using var responseDoc = JsonDocument.Parse(jsonResponse);
-                    var responseRoot = responseDoc.RootElement;
-                    
-                    // Hata kontrolü
-                    if (responseRoot.TryGetProperty("error", out var errorEl) && errorEl.ValueKind == JsonValueKind.String)
-                    {
-                        throw new Exception($"Sunucu hatası: {errorEl.GetString()}");
-                    }
-                    
-                    // printer_width'i al
-                    if (responseRoot.TryGetProperty("printer_width", out var widthEl) && widthEl.ValueKind == JsonValueKind.String)
-                    {
-                        PrinterWidth = widthEl.GetString() ?? PrinterWidth;
-                    }
-                    if (responseRoot.TryGetProperty("html", out var htmlEl) && htmlEl.ValueKind == JsonValueKind.String)
-                    {
-                        var htmlPayload = htmlEl.GetString();
-                        if (!string.IsNullOrWhiteSpace(htmlPayload))
-                        {
-                            content.Html = htmlPayload;
-                            return content;
-                        }
-                    }
-                    
-                    // lines array'i al
-                    if (responseRoot.TryGetProperty("lines", out var linesEl) && linesEl.ValueKind == JsonValueKind.Array)
-                    {
-                        var lineCount = 0;
-                        foreach (var line in linesEl.EnumerateArray())
-                        {
-                            AddLine(content, line.GetString() ?? string.Empty);
-                            lineCount++;
-                        }
-                        
-                        if (lineCount == 0)
-                        {
-                            throw new Exception("Fiş içeriği boş");
-                        }
-                    }
-                    else
-                    {
-                        throw new Exception("JSON'da 'lines' alanı bulunamadı");
-                    }
-                }
-                catch (HttpRequestException ex)
-                {
-                    throw new Exception($"Sunucuya bağlanılamadı: {ex.Message}", ex);
-                }
-                catch (TaskCanceledException)
-                {
-                    throw new Exception("Sunucu yanıt vermedi (timeout)");
-                }
-                catch (JsonException ex)
-                {
-                    throw new Exception($"Geçersiz JSON yanıtı: {ex.Message}", ex);
-                }
-                catch (Exception ex) when (ex.Message.StartsWith("Sunucu") || ex.Message.StartsWith("Fiş") || ex.Message.StartsWith("JSON"))
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    throw new Exception($"Beklenmeyen hata: {ex.Message}", ex);
-                }
+                return BuildContentFromRemoteUrl(url);
             }
         }
 
         TryLoadQrImage(content, root);
 
         return content;
+    }
+
+    private PrintContent BuildContentFromRemoteUrl(string url)
+    {
+        try
+        {
+            var jsonResponse = _httpClient.GetStringAsync(url).GetAwaiter().GetResult();
+
+            if (string.IsNullOrWhiteSpace(jsonResponse))
+            {
+                throw new Exception("Sunucudan boş yanıt alındı");
+            }
+
+            using var responseDoc = JsonDocument.Parse(jsonResponse);
+            var responseRoot = responseDoc.RootElement;
+
+            if (responseRoot.TryGetProperty("error", out var errorEl) && errorEl.ValueKind == JsonValueKind.String)
+            {
+                throw new Exception($"Sunucu hatası: {errorEl.GetString()}");
+            }
+
+            if (responseRoot.TryGetProperty("printer_width", out var widthEl) && widthEl.ValueKind == JsonValueKind.String)
+            {
+                PrinterWidth = widthEl.GetString() ?? PrinterWidth;
+            }
+
+            var remoteContent = new PrintContent();
+
+            if (responseRoot.TryGetProperty("html", out var htmlEl) && htmlEl.ValueKind == JsonValueKind.String)
+            {
+                var htmlPayload = htmlEl.GetString();
+                if (!string.IsNullOrWhiteSpace(htmlPayload))
+                {
+                    remoteContent.Html = htmlPayload;
+                    TryLoadQrImage(remoteContent, responseRoot);
+                    return remoteContent;
+                }
+            }
+
+            if (responseRoot.TryGetProperty("lines", out var linesEl) && linesEl.ValueKind == JsonValueKind.Array)
+            {
+                var lineCount = 0;
+                foreach (var line in linesEl.EnumerateArray())
+                {
+                    AddLine(remoteContent, line.GetString() ?? string.Empty);
+                    lineCount++;
+                }
+
+                if (lineCount == 0)
+                {
+                    throw new Exception("Fiş içeriği boş");
+                }
+
+                TryLoadQrImage(remoteContent, responseRoot);
+                return remoteContent;
+            }
+
+            throw new Exception("JSON'da 'html' veya 'lines' alanı bulunamadı");
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new Exception($"Sunucuya bağlanılamadı: {ex.Message}", ex);
+        }
+        catch (TaskCanceledException)
+        {
+            throw new Exception("Sunucu yanıt vermedi (timeout)");
+        }
+        catch (JsonException ex)
+        {
+            throw new Exception($"Geçersiz JSON yanıtı: {ex.Message}", ex);
+        }
+        catch (Exception ex) when (ex.Message.StartsWith("Sunucu", StringComparison.OrdinalIgnoreCase) || ex.Message.StartsWith("Fiş", StringComparison.OrdinalIgnoreCase) || ex.Message.StartsWith("JSON", StringComparison.OrdinalIgnoreCase))
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Beklenmeyen hata: {ex.Message}", ex);
+        }
     }
 
     private void ApplyPaperSize(PrintDocument document)

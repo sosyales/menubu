@@ -60,6 +60,7 @@ internal sealed class PrintJobPushClient : IDisposable
 
                 var handshake = JsonSerializer.Serialize(new
                 {
+                    type = "auth",
                     email,
                     password,
                     business_id = businessId,
@@ -122,19 +123,46 @@ internal sealed class PrintJobPushClient : IDisposable
         {
             using var doc = JsonDocument.Parse(message);
             var root = doc.RootElement;
+            var messageType = root.TryGetProperty("type", out var typeElement) && typeElement.ValueKind == JsonValueKind.String
+                ? typeElement.GetString()
+                : null;
+
+            if (!string.IsNullOrWhiteSpace(messageType))
+            {
+                switch (messageType.ToLowerInvariant())
+                {
+                    case "jobs":
+                        if (root.TryGetProperty("jobs", out var jobsArray) && jobsArray.ValueKind == JsonValueKind.Array)
+                        {
+                            DispatchJobs(jobsArray);
+                            return;
+                        }
+                        break;
+                    case "job":
+                        if (root.TryGetProperty("job", out var singleJob) && singleJob.ValueKind == JsonValueKind.Object)
+                        {
+                            var job = _jobFactory(singleJob);
+                            JobsReceived?.Invoke(new[] { job });
+                            return;
+                        }
+                        break;
+                    case "ready":
+                        return;
+                    case "error":
+                        var errorMessage = root.TryGetProperty("message", out var messageElement) && messageElement.ValueKind == JsonValueKind.String
+                            ? messageElement.GetString()
+                            : "Push kanalı hatası";
+                        if (!string.IsNullOrWhiteSpace(errorMessage))
+                        {
+                            ConnectionError?.Invoke(errorMessage!);
+                        }
+                        return;
+                }
+            }
 
             if (root.TryGetProperty("jobs", out var jobsEl) && jobsEl.ValueKind == JsonValueKind.Array)
             {
-                var jobs = new List<PrintJob>();
-                foreach (var jobNode in jobsEl.EnumerateArray())
-                {
-                    jobs.Add(_jobFactory(jobNode));
-                }
-
-                if (jobs.Count > 0)
-                {
-                    JobsReceived?.Invoke(jobs);
-                }
+                DispatchJobs(jobsEl);
                 return;
             }
 
@@ -147,6 +175,25 @@ internal sealed class PrintJobPushClient : IDisposable
         catch (Exception ex)
         {
             ConnectionError?.Invoke($"Push mesajı çözümlenemedi: {ex.Message}");
+        }
+    }
+
+    private void DispatchJobs(JsonElement jobsElement)
+    {
+        if (jobsElement.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        var jobs = new List<PrintJob>();
+        foreach (var jobNode in jobsElement.EnumerateArray())
+        {
+            jobs.Add(_jobFactory(jobNode));
+        }
+
+        if (jobs.Count > 0)
+        {
+            JobsReceived?.Invoke(jobs);
         }
     }
 

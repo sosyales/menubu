@@ -34,6 +34,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private MenuBuApiClient? _apiClient;
     private readonly System.Windows.Forms.Timer _pollTimer;
     private readonly System.Threading.Timer _connectionGuardTimer;
+    private System.Threading.Timer? _heartbeatTimer;
     private readonly SynchronizationContext _syncContext;
     private readonly SemaphoreSlim _pollLock = new(1, 1);
     private bool _initialPromptCompleted;
@@ -195,6 +196,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         ShowStatus($"Bağlandı: {_apiClient.BusinessName}", connected: true);
         RestartPushChannel();
+        StartHeartbeat();
 
         EnsureTimer();
         await HandleInitialJobsAsync(initialJobs);
@@ -509,6 +511,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
         _pollLock.Reset();
         StopPushChannel();
+        StopHeartbeat();
         _apiClient?.Dispose();
         _apiClient = null;
         _initialPromptCompleted = false;
@@ -548,6 +551,40 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _pushClient.ConnectionError -= OnPushChannelError;
         _pushClient.Dispose();
         _pushClient = null;
+    }
+
+    private void StartHeartbeat()
+    {
+        StopHeartbeat();
+        if (_apiClient == null)
+        {
+            return;
+        }
+
+        _heartbeatTimer = new System.Threading.Timer(_ => _ = SendHeartbeatCoreAsync(), null, TimeSpan.Zero, TimeSpan.FromSeconds(25));
+    }
+
+    private void StopHeartbeat()
+    {
+        _heartbeatTimer?.Dispose();
+        _heartbeatTimer = null;
+    }
+
+    private async Task SendHeartbeatCoreAsync()
+    {
+        if (_apiClient == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _apiClient.SendHeartbeatAsync(CancellationToken.None);
+        }
+        catch
+        {
+            // ignore heartbeat failures
+        }
     }
 
     private async Task ClearQueueAsync()
@@ -725,6 +762,22 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private string? SelectPrinterForJob(Models.PrintJob job)
     {
+        if (job.PrinterTags.Count > 0)
+        {
+            foreach (var tag in job.PrinterTags)
+            {
+                if (string.IsNullOrWhiteSpace(tag))
+                {
+                    continue;
+                }
+
+                if (_settings.PrinterMappings.TryGetValue(tag, out var mappedByTag))
+                {
+                    return mappedByTag;
+                }
+            }
+        }
+
         // Payload'dan printer_id veya printer_name al
         if (job.Payload.TryGetPropertyValue("printer_id", out var printerIdNode) && printerIdNode != null)
         {
@@ -744,13 +797,33 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 return mappedPrinter;
             }
         }
+
+        if (job.Metadata.TryGetPropertyValue("printer_id", out var metadataPrinterIdNode) && metadataPrinterIdNode != null)
+        {
+            var metadataPrinterId = metadataPrinterIdNode.GetValue<int>();
+            var config = _apiClient?.PrinterConfigs.FirstOrDefault(p => p.Id == metadataPrinterId);
+            if (config != null && _settings.PrinterMappings.TryGetValue(config.Name, out var mappedPrinter))
+            {
+                return mappedPrinter;
+            }
+        }
+
+        if (job.Metadata.TryGetPropertyValue("printer_name", out var metadataPrinterNameNode) && metadataPrinterNameNode != null)
+        {
+            var metadataPrinterName = metadataPrinterNameNode.GetValue<string>();
+            if (!string.IsNullOrWhiteSpace(metadataPrinterName) && _settings.PrinterMappings.TryGetValue(metadataPrinterName, out var mappedByMetadata))
+            {
+                return mappedByMetadata;
+            }
+        }
         
         if (_apiClient == null || _apiClient.PrinterConfigs.Count == 0)
         {
             return null; // Varsayılan yazıcı kullanılacak
         }
 
-        var jobType = job.JobType?.ToLowerInvariant() ?? "receipt";
+        var jobTypeToken = string.IsNullOrWhiteSpace(job.JobKind) ? job.JobType : job.JobKind;
+        var jobType = jobTypeToken?.ToLowerInvariant() ?? "receipt";
         
         // Önce default yazıcıyı bul
         foreach (var config in _apiClient.PrinterConfigs)
