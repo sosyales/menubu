@@ -1,5 +1,6 @@
 using System;
-using System.Runtime.InteropServices;
+using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Web.WebView2.Core;
@@ -11,36 +12,37 @@ internal sealed class HtmlPrinter : IDisposable
 {
     private WebView2? _webView;
     private readonly SemaphoreSlim _initLock = new(1, 1);
+    private readonly SemaphoreSlim _printLock = new(1, 1);
     private bool _isInitialized;
     private bool _disposed;
     private CoreWebView2Environment? _environment;
+    private Version? _runtimeVersion;
+    private static readonly Version MinimumSilentPrintVersion = new(118, 0, 0, 0);
 
     public string? SelectedPrinter { get; set; }
     public string PrinterWidth { get; set; } = "58mm";
 
     public async Task PrintHtmlAsync(string html, CancellationToken cancellationToken)
     {
+        await _printLock.WaitAsync(cancellationToken);
         await EnsureInitializedAsync(cancellationToken);
 
         if (_webView == null)
         {
+            _printLock.Release();
             throw new InvalidOperationException("WebView2 başlatılamadı");
         }
 
-        var preparedHtml = PrepareHtml(html);
-        await LoadHtmlAsync(preparedHtml, cancellationToken);
-
         try
         {
+            var preparedHtml = PrepareHtml(html);
+            await LoadHtmlAsync(preparedHtml, cancellationToken);
+
             await PrintWithCoreAsync(_webView.CoreWebView2, cancellationToken);
         }
-        catch (NotImplementedException)
+        finally
         {
-            await FallbackWindowPrintAsync(html, cancellationToken);
-        }
-        catch (COMException ex) when ((uint)ex.HResult == 0x80004001) // E_NOTIMPL
-        {
-            await FallbackWindowPrintAsync(html, cancellationToken);
+            _printLock.Release();
         }
     }
 
@@ -68,6 +70,7 @@ internal sealed class HtmlPrinter : IDisposable
 
             _environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
             await _webView.EnsureCoreWebView2Async(_environment);
+            _runtimeVersion = ParseRuntimeVersion(_webView.CoreWebView2.Environment.BrowserVersionString);
 
             _isInitialized = true;
         }
@@ -117,6 +120,11 @@ internal sealed class HtmlPrinter : IDisposable
             throw new InvalidOperationException("WebView2 ortamı oluşturulamadı");
         }
 
+        if (_runtimeVersion == null || _runtimeVersion < MinimumSilentPrintVersion)
+        {
+            throw new InvalidOperationException("Sessiz yazdırma için WebView2 Runtime 118+ gereklidir. Lütfen runtime'ı güncelleyin.");
+        }
+
         var settings = _environment.CreatePrintSettings();
         settings.ShouldPrintHeaderAndFooter = false;
         settings.ShouldPrintBackgrounds = true;
@@ -126,29 +134,25 @@ internal sealed class HtmlPrinter : IDisposable
             settings.PrinterName = SelectedPrinter;
         }
 
-        var status = await coreWebView2.PrintAsync(settings);
-        if (status != CoreWebView2PrintStatus.Succeeded)
+        const int maxAttempts = 3;
+        CoreWebView2PrintStatus lastStatus = CoreWebView2PrintStatus.OtherError;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            throw new InvalidOperationException($"Yazdırma başarısız: {status}");
+            lastStatus = await coreWebView2.PrintAsync(settings);
+            if (lastStatus == CoreWebView2PrintStatus.Succeeded)
+            {
+                return;
+            }
+
+            if (lastStatus is CoreWebView2PrintStatus.PrinterUnavailable or CoreWebView2PrintStatus.PrinterFull or CoreWebView2PrintStatus.PrinterOutOfPaper)
+            {
+                throw new InvalidOperationException($"Yazdırma başarısız: {lastStatus}.");
+            }
+
+            await Task.Delay(200 * attempt, cancellationToken);
         }
-    }
 
-    private async Task FallbackWindowPrintAsync(string html, CancellationToken cancellationToken)
-    {
-        if (_webView?.CoreWebView2 == null)
-        {
-            throw new InvalidOperationException("WebView2 hazır değil");
-        }
-
-        await _webView.CoreWebView2.ExecuteScriptAsync($@"
-            document.open();
-            document.write({System.Text.Json.JsonSerializer.Serialize(html)});
-            document.close();
-        ");
-
-        await Task.Delay(250, cancellationToken);
-        await _webView.CoreWebView2.ExecuteScriptAsync("window.print();");
-        await Task.Delay(400, cancellationToken);
+        throw new InvalidOperationException($"Yazdırma başarısız: {lastStatus}.");
     }
 
     private double GetScaleFactor() =>
@@ -195,6 +199,29 @@ internal sealed class HtmlPrinter : IDisposable
 
         _webView?.Dispose();
         _initLock.Dispose();
+        _printLock.Dispose();
         _environment = null;
+    }
+
+    private static Version? ParseRuntimeVersion(string? versionString)
+    {
+        if (string.IsNullOrWhiteSpace(versionString))
+        {
+            return null;
+        }
+
+        var firstToken = versionString.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+        if (Version.TryParse(firstToken, out var version))
+        {
+            return version;
+        }
+
+        var numericPart = new string(firstToken.TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
+        if (Version.TryParse(numericPart, out var fallback))
+        {
+            return fallback;
+        }
+
+        return null;
     }
 }
