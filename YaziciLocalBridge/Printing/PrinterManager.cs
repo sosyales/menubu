@@ -101,7 +101,7 @@ internal sealed class PrinterManager : IDisposable
         if (!string.IsNullOrWhiteSpace(content.Html))
         {
             _htmlPrinter.SelectedPrinter = SelectedPrinter;
-            _htmlPrinter.PrinterWidth = content.PrinterWidth;
+            _htmlPrinter.PrinterWidth = NormalizePrinterWidth(content.PrinterWidth);
             return _htmlPrinter.PrintHtmlAsync(content.Html!, cancellationToken);
         }
 
@@ -593,6 +593,7 @@ internal sealed class PrinterManager : IDisposable
 
         if (TryBuildStructuredReceipt(payloadDoc, out var structuredContent) && structuredContent.Lines.Count > 0)
         {
+            structuredContent.PrinterWidth = PrinterWidth;
             return structuredContent;
         }
 
@@ -683,14 +684,16 @@ internal sealed class PrinterManager : IDisposable
             return false;
         }
 
-        content = new PrintContent();
+        content = new PrintContent
+        {
+            PrinterWidth = PrinterWidth
+        };
 
         if (orderElement.TryGetProperty("printer_width", out var widthElement) && widthElement.ValueKind == JsonValueKind.String)
         {
             PrinterWidth = widthElement.GetString() ?? PrinterWidth;
+            content.PrinterWidth = PrinterWidth;
         }
-
-        content.PrinterWidth = PrinterWidth;
 
         TryLoadQrImage(content, orderElement);
 
@@ -1455,36 +1458,9 @@ internal sealed class PrinterManager : IDisposable
                 if (!string.IsNullOrWhiteSpace(value))
                 {
                     url = value;
-        return true;
-    }
-
-    private string NormalizePrinterWidth(string? requested)
-    {
-        if (string.IsNullOrWhiteSpace(requested))
-        {
-            return PrinterWidth;
-        }
-
-        var normalized = requested.Trim().ToLowerInvariant();
-        if (normalized.Contains("80") || normalized.Contains("72") || normalized.Contains("3"))
-        {
-            return "80mm";
-        }
-
-        return "58mm";
-    }
-
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-        _htmlPrinter.Dispose();
-    }
-}
+                    return true;
+                }
+            }
         }
 
         url = string.Empty;
@@ -1524,6 +1500,33 @@ internal sealed class PrinterManager : IDisposable
                 System.Threading.Thread.Sleep(500);
             }
         }
+    }
+
+    private string NormalizePrinterWidth(string? requested)
+    {
+        if (string.IsNullOrWhiteSpace(requested))
+        {
+            return PrinterWidth;
+        }
+
+        var normalized = requested.Trim().ToLowerInvariant();
+        if (normalized.Contains("80") || normalized.Contains("72") || normalized.Contains("3"))
+        {
+            return "80mm";
+        }
+
+        return "58mm";
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _htmlPrinter.Dispose();
     }
 
     private readonly struct ReceiptTotal
